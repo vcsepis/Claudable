@@ -1,12 +1,12 @@
-// Claudable - Prisma Schema (SQLite)
-// Supports both development and production using SQLite
+// Claudable - Prisma Schema (PostgreSQL)
+// Supports Supabase / Postgres deployments
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
