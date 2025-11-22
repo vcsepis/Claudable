@@ -192,6 +192,31 @@ async function collectEnvOverrides(projectPath: string): Promise<EnvOverrides> {
   return overrides;
 }
 
+function resolvePublicBaseUrl(effectivePort: number): string | null {
+  const raw =
+    process.env.PREVIEW_PUBLIC_URL ||
+    process.env.RENDER_EXTERNAL_URL ||
+    process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!raw) {
+    if (process.env.PORT && Number.isFinite(Number(process.env.PORT))) {
+      return `http://localhost:${process.env.PORT}`;
+    }
+    return null;
+  }
+
+  try {
+    const parsed = new URL(raw);
+    // If no explicit port, reuse effectivePort when the URL points to localhost
+    if (!parsed.port && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')) {
+      parsed.port = String(effectivePort);
+    }
+    return parsed.origin;
+  } catch {
+    return raw.replace(/\/+$/, '');
+  }
+}
+
 function resolvePreviewBounds(): { start: number; end: number } {
   const envStartRaw = Number.parseInt(process.env.PREVIEW_PORT_START || '', 10);
   const envEndRaw = Number.parseInt(process.env.PREVIEW_PORT_END || '', 10);
@@ -723,10 +748,21 @@ class PreviewManager {
     }
 
     const previewBounds = resolvePreviewBounds();
-    const preferredPort = await findAvailablePort(
-      previewBounds.start,
-      previewBounds.end
+    const envPortOverride = parsePort(
+      process.env.PREVIEW_PUBLIC_PORT ||
+      process.env.PREVIEW_HOST_PORT ||
+      process.env.PORT
     );
+
+    let preferredPort: number;
+    if (envPortOverride && envPortOverride > 0 && envPortOverride <= PREVIEW_MAX_PORT) {
+      preferredPort = envPortOverride;
+    } else {
+      preferredPort = await findAvailablePort(
+        previewBounds.start,
+        previewBounds.end
+      );
+    }
 
     const initialUrl = `http://localhost:${preferredPort}`;
 
@@ -843,7 +879,8 @@ class PreviewManager {
     }
 
     const effectivePort = previewProcess.port;
-    let resolvedUrl: string = `http://localhost:${effectivePort}`;
+    const publicBase = resolvePublicBaseUrl(effectivePort);
+    let resolvedUrl: string = publicBase ?? `http://localhost:${effectivePort}`;
     if (typeof overrides.url === 'string' && overrides.url.trim().length > 0) {
       resolvedUrl = overrides.url.trim();
     }
