@@ -851,8 +851,8 @@ class PreviewManager {
     env.NEXT_PUBLIC_APP_URL = resolvedUrl;
     previewProcess.url = resolvedUrl;
 
-    // Prefer turbopack if explicitly enabled to speed up dev server boot
-    const useTurbo = process.env.PREVIEW_USE_TURBO === '1';
+    // Prefer Turbopack by default for faster dev boot (can disable with PREVIEW_USE_TURBO=0)
+    const useTurbo = process.env.PREVIEW_USE_TURBO !== '0';
     const devArgs = useTurbo
       ? ['run', 'dev', '--', '--turbo', '--port', String(effectivePort)]
       : ['run', 'dev', '--', '--port', String(effectivePort)];
@@ -908,14 +908,16 @@ class PreviewManager {
       log(Buffer.from(`Preview process failed: ${error.message}`));
     });
 
-    await waitForPreviewReady(previewProcess.url, log).catch(() => {
-      // wait function already logged; ignore errors
-    });
-
+    // Immediately mark running so UI can proceed without waiting for warmup
     await updateProject(projectId, {
       previewUrl: previewProcess.url,
       previewPort: previewProcess.port,
       status: 'running',
+    });
+
+    // Warmup check in background (non-blocking)
+    void waitForPreviewReady(previewProcess.url, log).catch(() => {
+      // wait function already logged; ignore errors
     });
 
     return this.toInfo(previewProcess);

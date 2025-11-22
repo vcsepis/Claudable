@@ -253,6 +253,7 @@ export default function ChatPage() {
   const initialPromptSentRef = useRef(false);
   const [showPublishPanel, setShowPublishPanel] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
+  const [previewErrorCount, setPreviewErrorCount] = useState(0);
   const [githubConnected, setGithubConnected] = useState<boolean | null>(null);
   const [vercelConnected, setVercelConnected] = useState<boolean | null>(null);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
@@ -767,12 +768,14 @@ const persistProjectPreferences = useCallback(
     try {
       setIsStartingPreview(true);
       setPreviewInitializationMessage('Starting development server...');
+      setPreviewErrorCount(0);
       
       // Simulate progress updates
       setTimeout(() => setPreviewInitializationMessage('Installing dependencies...'), 1000);
       setTimeout(() => setPreviewInitializationMessage('Building your application...'), 2500);
       
-      const r = await fetch(`${API_BASE}/api/projects/${projectId}/preview/start`, { method: 'POST' });
+      const base = resolveApiBase();
+      const r = await fetch(`${base}/api/projects/${projectId}/preview/start`, { method: 'POST' });
       if (!r.ok) {
         console.error('Failed to start preview:', r.statusText);
         setPreviewInitializationMessage('Failed to start preview');
@@ -845,11 +848,35 @@ const persistProjectPreferences = useCallback(
     return '';
   }, []);
 
+  const fetchWithRetry = useCallback(
+    async (url: string, init?: RequestInit, retries = 3, backoffMs = 300) => {
+      let attempt = 0;
+      while (attempt <= retries) {
+        try {
+          const res = await fetch(url, init);
+          if (!res.ok && res.status >= 500 && attempt < retries) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          return res;
+        } catch (error) {
+          attempt += 1;
+          if (attempt > retries) {
+            throw error;
+          }
+          const delay = backoffMs * Math.pow(2, attempt - 1);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+      throw new Error('Exhausted retries');
+    },
+    []
+  );
+
   const loadSubdirectory = useCallback(async (dir: string): Promise<Entry[]> => {
     try {
       const base = resolveApiBase();
       const url = `${base}/api/repo/${projectId}/tree?dir=${encodeURIComponent(dir)}`;
-      const r = await fetch(url);
+      const r = await fetchWithRetry(url);
       if (!r.ok) {
         console.warn('Failed to load subdirectory: HTTP', r.status, r.statusText);
         return [];
@@ -860,7 +887,7 @@ const persistProjectPreferences = useCallback(
       console.error('Failed to load subdirectory:', error);
       return [];
     }
-  }, [projectId, resolveApiBase]);
+  }, [projectId, resolveApiBase, fetchWithRetry]);
 
   const loadTree = useCallback(async (dir = '.') => {
     try {
@@ -980,7 +1007,8 @@ const persistProjectPreferences = useCallback(
       setSaveFeedback('idle');
       setSaveError(null);
 
-      const r = await fetch(`${API_BASE}/api/repo/${projectId}/file?path=${encodeURIComponent(path)}`);
+      const base = resolveApiBase();
+      const r = await fetchWithRetry(`${base}/api/repo/${projectId}/file?path=${encodeURIComponent(path)}`);
       
       if (!r.ok) {
         console.error('Failed to load file:', r.status, r.statusText);
@@ -1030,7 +1058,8 @@ const persistProjectPreferences = useCallback(
   const reloadCurrentFile = useCallback(async () => {
     if (selectedFile && !showPreview && !hasUnsavedChanges) {
       try {
-        const r = await fetch(`${API_BASE}/api/repo/${projectId}/file?path=${encodeURIComponent(selectedFile)}`);
+        const base = resolveApiBase();
+        const r = await fetchWithRetry(`${base}/api/repo/${projectId}/file?path=${encodeURIComponent(selectedFile)}`);
         if (r.ok) {
           const data = await r.json();
           const newContent = data.content || '';
@@ -1126,7 +1155,8 @@ const persistProjectPreferences = useCallback(
     setSaveError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/api/repo/${projectId}/file`, {
+      const base = resolveApiBase();
+      const response = await fetchWithRetry(`${base}/api/repo/${projectId}/file`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: selectedFile, content: contentToSave }),
@@ -2683,11 +2713,20 @@ const persistProjectPreferences = useCallback(
                         className="w-full h-full border-none bg-white "
                         src={previewUrl}
                         onError={() => {
-                          // Show error overlay
-                          const overlay = document.getElementById('iframe-error-overlay');
-                          if (overlay) overlay.style.display = 'flex';
+                          setPreviewErrorCount((count) => {
+                            const next = count + 1;
+                            if (next <= 2) {
+                              console.warn('Preview iframe error, attempting restart...');
+                              void start();
+                            } else {
+                              const overlay = document.getElementById('iframe-error-overlay');
+                              if (overlay) overlay.style.display = 'flex';
+                            }
+                            return next;
+                          });
                         }}
                         onLoad={() => {
+                          setPreviewErrorCount(0);
                           // Hide error overlay when loaded successfully
                           const overlay = document.getElementById('iframe-error-overlay');
                           if (overlay) overlay.style.display = 'none';

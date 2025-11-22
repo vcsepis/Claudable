@@ -1014,6 +1014,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   const logsEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedInitialDataRef = useRef(false);
+  const isLoadingHistoryRef = useRef(false);
   const sseFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoggedSseFallbackRef = useRef(false);
   const [enableSseFallback, setEnableSseFallback] = useState(false);
@@ -1022,6 +1023,8 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   const [expandedToolMessages, setExpandedToolMessages] = useState<Record<string, ToolExpansionState>>({});
   const fallbackMessageIdRef = useRef<Map<string, string>>(new Map());
   const visibleToolMessageIdsRef = useRef<Set<string>>(new Set());
+  const isRecoveringMessagesRef = useRef(false);
+  const lastRecoveryCheckRef = useRef(0);
 
   const ensureStableMessageId = useCallback((message: ChatMessage): string => {
     if (message.id) {
@@ -1245,6 +1248,14 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   // Message recovery mechanism for network interruptions
   const recoverMissingMessages = useCallback(async () => {
     if (!projectId) return;
+    if (isRecoveringMessagesRef.current) return;
+
+    const now = Date.now();
+    if (now - lastRecoveryCheckRef.current < 4000) {
+      return;
+    }
+    isRecoveringMessagesRef.current = true;
+    lastRecoveryCheckRef.current = now;
 
     try {
       console.log('[ChatLog] Checking for missing messages due to network interruption...');
@@ -1262,11 +1273,14 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       // If database has more messages than UI state, trigger a reload flag
       if (totalMessages > currentMessageCount) {
         console.log(`[ChatLog] Detected ${totalMessages - currentMessageCount} missing messages. Setting reload flag...`);
-        // Set a flag to trigger reload in the polling effect
+        // Trigger a lightweight refresh of history; guarded to avoid piling up requests
         setHasLoadedOnce(false);
+        setNeedsHistoryRefresh(true);
       }
     } catch (error) {
       console.error('[ChatLog] Error checking for missing messages:', error);
+    } finally {
+      isRecoveringMessagesRef.current = false;
     }
   }, [projectId, messages.length]);
 
@@ -1592,11 +1606,18 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     let disposed = false;
 
     const resolveStreamUrl = () => {
-      const rawBase = process.env.NEXT_PUBLIC_API_BASE?.trim() ?? '';
+      const rawBase =
+        process.env.NEXT_PUBLIC_API_BASE?.trim() ||
+        process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+        '';
       const endpoint = `/api/chat/${projectId}/stream`;
       if (rawBase.length > 0) {
         const normalizedBase = rawBase.replace(/\/+$/, '');
         return `${normalizedBase}${endpoint}`;
+      }
+      // Fallback to current origin if no base provided
+      if (typeof window !== 'undefined') {
+        return `${window.location.origin}${endpoint}`;
       }
       return endpoint;
     };
@@ -1881,12 +1902,20 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   // Load chat history
   const loadChatHistory = useCallback(
     async ({ showLoading }: { showLoading?: boolean } = {}) => {
+      if (isLoadingHistoryRef.current) {
+        if (process.env.NODE_ENV === 'development') {
+          console.debug('[ChatLog] Skipping loadChatHistory because a request is already in flight');
+        }
+        return;
+      }
+
       const shouldShowLoading = showLoading ?? !hasLoadedInitialDataRef.current;
       let didSucceed = false;
       if (shouldShowLoading) {
         setIsLoading(true);
       }
       setHistoryError(null);
+      isLoadingHistoryRef.current = true;
 
       try {
         const controller = new AbortController();
@@ -1953,6 +1982,7 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           console.warn('Failed to load chat history (network issue):', error);
         }
       } finally {
+        isLoadingHistoryRef.current = false;
         if (shouldShowLoading) {
           setIsLoading(false);
         }
