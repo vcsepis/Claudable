@@ -53,16 +53,18 @@ async function ensureChannel(projectId: string): Promise<RealtimeChannel | null>
 export async function broadcastSupabaseRealtime(
   projectId: string,
   event: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown> | unknown
 ): Promise<void> {
   try {
     const channel = await ensureChannel(projectId);
     if (!channel) return;
 
+    const normalizedPayload = payload as Record<string, unknown>;
+
     const { error } = await channel.send({
       type: 'broadcast',
       event,
-      payload,
+      payload: normalizedPayload,
     });
 
     if (error) {
