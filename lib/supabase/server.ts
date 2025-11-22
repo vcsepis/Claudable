@@ -61,14 +61,15 @@ export async function broadcastSupabaseRealtime(
 
     const normalizedPayload = payload as Record<string, unknown>;
 
-    const { error } = await channel.send({
+    const result = await channel.send({
       type: 'broadcast',
       event,
       payload: normalizedPayload,
     });
 
-    if (error) {
-      console.warn('[SupabaseRealtime] Broadcast error:', error);
+    const sendError = (result as { error?: unknown })?.error;
+    if (sendError) {
+      console.warn('[SupabaseRealtime] Broadcast error:', sendError);
     }
   } catch (error) {
     console.warn('[SupabaseRealtime] Failed to broadcast:', error);
