@@ -39,7 +39,7 @@ console.log('   Authenticate with the following command:');
 console.log('   $ claude auth login\n');
 
 // 4. Project readiness status
-console.log('✨ Claudable is ready to use Claude Agent SDK!\n');
+  console.log('✨ monmi is ready to use Claude Agent SDK!\n');
 console.log('   Next steps:');
 console.log('   1. npm run dev - Start development server');
 console.log('   2. Visit http://localhost:3000');

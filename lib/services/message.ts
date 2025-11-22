@@ -5,6 +5,8 @@
 import { prisma } from '@/lib/db/client';
 import type { Message, CreateMessageInput } from '@/types/backend';
 import type { Message as PrismaMessage } from '@prisma/client';
+import { serializeMessage } from '@/lib/serializers/chat';
+import { broadcastSupabaseRealtime } from '@/lib/supabase/server';
 
 function mapPrismaMessage(message: PrismaMessage): Message {
   const updatedAt =
@@ -102,6 +104,10 @@ export async function createMessage(input: CreateMessageInput): Promise<Message>
         metadataJsonLength: mappedMetadataLength,
         metadataJsonPreview: mappedMetadataPreview,
       });
+
+      // Fire-and-forget realtime broadcast via Supabase
+      const realtimePayload = serializeMessage(mappedMessage);
+      void broadcastSupabaseRealtime(mappedMessage.projectId, 'message', realtimePayload);
 
       return mappedMessage;
     } catch (error) {

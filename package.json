@@ -30,6 +30,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.22",
     "@prisma/client": "^6.1.0",
+    "@supabase/supabase-js": "^2.45.4",
     "dotenv": "^16.4.5",
     "framer-motion": "^11.11.17",
     "highlight.js": "^11.10.0",
@@ -72,7 +73,7 @@
     "no-code",
     "low-code"
   ],
-  "author": "Claudable Team",
+  "author": "monmi Team",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -80,7 +81,7 @@
   },
   "build": {
     "appId": "com.claudable.desktop",
-    "productName": "Claudable",
+    "productName": "monmi",
     "files": [
       "electron/**/*",
       ".next/standalone/**/*",

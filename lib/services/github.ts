@@ -20,7 +20,7 @@ async function githubFetch(token: string, endpoint: string, init?: RequestInit) 
     headers: {
       Accept: 'application/vnd.github+json',
       Authorization: `Bearer ${token}`,
-      'User-Agent': 'Claudable-Next',
+      'User-Agent': 'monmi-Next',
       ...init?.headers,
     },
   });
@@ -243,7 +243,7 @@ export async function pushProjectToGitHub(projectId: string) {
     const userEmail = user.email || `${user.login}@users.noreply.github.com`;
     ensureGitConfig(repoPath, userName, userEmail);
     addOrUpdateRemote(repoPath, 'origin', authenticatedUrl);
-    const committed = commitAll(repoPath, 'Update from Claudable');
+    const committed = commitAll(repoPath, 'Update from monmi');
     if (!committed) {
       console.log('[GitHubService] No changes to commit before push');
     }

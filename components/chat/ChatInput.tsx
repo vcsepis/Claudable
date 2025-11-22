@@ -51,7 +51,7 @@ interface ChatInputProps {
 export default function ChatInput({
   onSendMessage,
   disabled = false,
-  placeholder = "Ask Claudable...",
+  placeholder = "Ask monmi...",
   mode = 'act',
   onModeChange,
   projectId,
@@ -94,20 +94,15 @@ export default function ChatInput({
     console.log('❌ Please select a project.');
   }
 
-  const modelOptionsForCli = useMemo(
-    () => modelOptions.filter(option => option.cli === preferredCli),
-    [modelOptions, preferredCli]
-  );
-
-  const selectedModelValue = useMemo(() => {
-    return modelOptionsForCli.some(opt => opt.id === selectedModel) ? selectedModel : '';
-  }, [modelOptionsForCli, selectedModel]);
+  // Lock to Claude and latest model; ignore incoming options
+  const modelOptionsForCli = useMemo(() => [], []);
+  const selectedModelValue = '';
 
   useEffect(() => {
-    if (!disabled && !cliChangeDisabled && !modelChangeDisabled) {
+    if (!disabled) {
       textareaRef.current?.focus();
     }
-  }, [disabled, cliChangeDisabled, modelChangeDisabled]);
+  }, [disabled]);
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) {
@@ -472,52 +467,7 @@ export default function ChatInput({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-col text-[11px] text-gray-500 ">
-              <span>Assistant</span>
-              <select
-                value={preferredCli}
-                onChange={(e) => {
-                  onCliChange?.(e.target.value);
-                  requestAnimationFrame(() => textareaRef.current?.focus());
-                }}
-                disabled={cliChangeDisabled || !onCliChange}
-                className="mt-1 w-32 rounded-md border border-gray-300 bg-white text-gray-700 text-xs py-1 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
-              >
-                {cliOptions.length === 0 && <option value={preferredCli}>{preferredCli}</option>}
-                {cliOptions.map(option => (
-                  <option key={option.id} value={option.id} disabled={!option.available}>
-                    {option.name}{!option.available ? ' (Unavailable)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col text-[11px] text-gray-500 ">
-              <span>Model</span>
-              <select
-                value={selectedModelValue}
-                onChange={(e) => {
-                  const option = modelOptionsForCli.find(opt => opt.id === e.target.value);
-                  if (option) {
-                    onModelChange?.(option);
-                    requestAnimationFrame(() => textareaRef.current?.focus());
-                  }
-                }}
-                disabled={modelChangeDisabled || !onModelChange || modelOptionsForCli.length === 0}
-                className="mt-1 w-40 rounded-md border border-gray-300 bg-white text-gray-700 text-xs py-1 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-60"
-              >
-                {modelOptionsForCli.length === 0 && <option value="">No models available</option>}
-                {modelOptionsForCli.length > 0 && selectedModelValue === '' && (
-                  <option value="" disabled>Select model</option>
-                )}
-                {modelOptionsForCli.map(option => (
-                  <option key={option.id} value={option.id} disabled={!option.available}>
-                    {option.name}{!option.available ? ' (Unavailable)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          {/* Assistant/Model selectors removed to always use default Claude + latest model */}
         </div>
 
         <div className="relative">

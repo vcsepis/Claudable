@@ -81,8 +81,8 @@ export default function HomePage() {
       fallbackEnabled: project.fallbackEnabled ?? project.fallback_enabled ?? false,
     };
   }, [sanitizeAssistant, normalizeModelForAssistant]);
-  const [selectedAssistant, setSelectedAssistant] = useState<ActiveCliId>(DEFAULT_ASSISTANT);
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
+  const [selectedAssistant, setSelectedAssistant] = useState<ActiveCliId>('claude');
+  const [selectedModel, setSelectedModel] = useState(getDefaultModelForCli('claude'));
   const [usingGlobalDefaults, setUsingGlobalDefaults] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cliStatus, setCLIStatus] = useState<CLIStatus>({});
@@ -130,16 +130,16 @@ export default function HomePage() {
   useEffect(() => {
     if (!usingGlobalDefaults || !isInitialLoad) return;
     
-    const cli = sanitizeAssistant(globalSettings?.default_cli);
+    const cli = 'claude';
     setSelectedAssistant(cli);
-    const modelFromGlobal = globalSettings?.cli_settings?.[cli]?.model;
+    const modelFromGlobal = getDefaultModelForCli(cli);
     setSelectedModel(normalizeModelForAssistant(cli, modelFromGlobal));
   }, [globalSettings, usingGlobalDefaults, isInitialLoad, sanitizeAssistant, normalizeModelForAssistant]);
   
   // Save selections to sessionStorage when they change
   useEffect(() => {
     if (!isInitialLoad && selectedAssistant && selectedModel) {
-      const normalizedAssistant = sanitizeAssistant(selectedAssistant);
+      const normalizedAssistant = 'claude';
       sessionStorage.setItem('selectedAssistant', normalizedAssistant);
       sessionStorage.setItem('selectedModel', normalizeModelForAssistant(normalizedAssistant, selectedModel));
     }
@@ -921,7 +921,7 @@ export default function HomePage() {
                     lineHeight: '72px'
                   }}
                 >
-                  Claudable
+                  monmi
                 </h1>
               </div>
               <p className="text-xl text-gray-700 font-light tracking-tight">
@@ -972,7 +972,7 @@ export default function HomePage() {
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Ask Claudable to create a blog about..."
+                  placeholder="Ask monmi to create a blog about..."
                   disabled={isCreatingProject}
                   className="flex w-full rounded-md px-2 py-2 placeholder:text-gray-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent focus:bg-transparent flex-1 text-gray-900 overflow-y-auto"
                   style={{ height: '120px' }}
@@ -1024,100 +1024,7 @@ export default function HomePage() {
                     />
                   </label>
                 </div>
-                {/* Agent Selector */}
-                <div className="relative z-[200]" ref={assistantDropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAssistantDropdown(!showAssistantDropdown);
-                      setShowModelDropdown(false);
-                    }}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 border border-gray-200/50 bg-transparent shadow-sm hover:bg-gray-50 hover:border-gray-300/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 hover:text-gray-900 focus-visible:ring-0"
-                  >
-                    <div className="w-4 h-4 rounded overflow-hidden">
-                      <Image
-                        src={selectedAssistantOption?.icon ?? '/claude.png'}
-                        alt={selectedAssistantOption?.name ?? 'Claude Code'}
-                        width={16}
-                        height={16}
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <span className="hidden md:flex text-sm font-medium">
-                      {selectedAssistantOption?.name ?? 'Claude Code'}
-                    </span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 -960 960 960" className="shrink-0 h-3 w-3 rotate-90" fill="currentColor">
-                      <path d="M530-481 353-658q-9-9-8.5-21t9.5-21 21.5-9 21.5 9l198 198q5 5 7 10t2 11-2 11-7 10L396-261q-9 9-21 8.5t-21-9.5-9-21.5 9-21.5z"/>
-                    </svg>
-                  </button>
-                  
-                  {showAssistantDropdown && (
-                    <div className="absolute top-full mt-1 left-0 z-[300] min-w-full whitespace-nowrap rounded-2xl border border-gray-200 bg-white backdrop-blur-xl shadow-lg">
-                      {ASSISTANT_OPTIONS.map((option) => (
-                        <button
-                          key={option.id}
-                          onClick={() => handleAssistantChange(option.id)}
-                          disabled={!cliStatus[option.id]?.installed}
-                          className={`w-full flex items-center gap-2 px-3 py-2 text-left first:rounded-t-2xl last:rounded-b-2xl transition-colors ${
-                            !cliStatus[option.id]?.installed
-                              ? 'opacity-50 cursor-not-allowed text-gray-400 '
-                              : selectedAssistant === option.id 
-                              ? 'bg-gray-100 text-black font-semibold' 
-                              : 'text-gray-800 hover:text-black hover:bg-gray-100 '
-                          }`}
-                        >
-                          <div className="w-4 h-4 rounded overflow-hidden">
-                            <Image
-                              src={option.icon ?? '/claude.png'}
-                              alt={option.name}
-                              width={16}
-                              height={16}
-                              className="w-full h-full object-contain"
-                            />
-                          </div>
-                          <span className="text-sm font-medium">{option.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                
-                {/* Model Selector */}
-                <div className="relative z-[200]" ref={modelDropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowModelDropdown((current) => !current);
-                      setShowAssistantDropdown(false);
-                    }}
-                    className="justify-center whitespace-nowrap text-sm font-medium transition-colors duration-100 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 border border-gray-200/50 bg-transparent shadow-sm hover:bg-gray-50 hover:border-gray-300/50 px-3 py-2 flex h-8 items-center gap-1 rounded-full text-gray-700 hover:text-gray-900 focus-visible:ring-0 min-w-[140px]"
-                  >
-                    <span className="text-sm font-medium whitespace-nowrap">
-                      {availableModels.find(m => m.id === selectedModel)?.name ?? getModelDisplayName(selectedAssistant, selectedModel)}
-                    </span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 -960 960 960" className="shrink-0 h-3 w-3 rotate-90 ml-auto" fill="currentColor">
-                      <path d="M530-481 353-658q-9-9-8.5-21t9.5-21 21.5-9 21.5 9l198 198q5 5 7 10t2 11-2 11-7 10L396-261q-9 9-21 8.5t-21-9.5-9-21.5 9-21.5z"/>
-                    </svg>
-                  </button>
-                  
-                  {showModelDropdown && (
-                    <div className="absolute top-full mt-1 left-0 z-[300] min-w-full max-h-[300px] overflow-y-auto rounded-2xl border border-gray-200 bg-white backdrop-blur-xl shadow-lg">
-                      {availableModels.map((model) => (
-                          <button
-                            key={model.id}
-                            onClick={() => handleModelChange(model.id)}
-                            className={`w-full px-3 py-2 text-left first:rounded-t-2xl last:rounded-b-2xl transition-colors ${
-                              selectedModel === model.id 
-                                ? 'bg-gray-100 text-black font-semibold' 
-                                : 'text-gray-800 hover:text-black hover:bg-gray-100 '
-                            }`}
-                          >
-                            <span className="text-sm font-medium">{model.name}</span>
-                          </button>
-                        ))}
-                    </div>
-                  )}
-                </div>
+                {/* Agent Selector removed — defaulting to Claude Code / newest model */}
                 
                 {/* Send Button */}
                 <div className="ml-auto flex items-center gap-1">
@@ -1146,7 +1053,7 @@ export default function HomePage() {
               {[
                 { 
                   text: 'Landing Page',
-                  prompt: 'Design a modern, elegant, and visually stunning landing page for claudable with a clean, minimalistic aesthetic and a strong focus on user experience and conversion. Use a harmonious color palette, smooth gradients, soft shadows, and subtle animations to create a premium feel. Include a bold hero section with a clear headline and CTA, feature highlights with simple icons, social proof like testimonials or logos, and a final call-to-action at the bottom. Use large, impactful typography, balanced white space, and a responsive grid-based layout for a polished, pixel-perfect design optimized for both desktop and mobile.'
+                  prompt: 'Design a modern, elegant, and visually stunning landing page for monmi with a clean, minimalistic aesthetic and a strong focus on user experience and conversion. Use a harmonious color palette, smooth gradients, soft shadows, and subtle animations to create a premium feel. Include a bold hero section with a clear headline and CTA, feature highlights with simple icons, social proof like testimonials or logos, and a final call-to-action at the bottom. Use large, impactful typography, balanced white space, and a responsive grid-based layout for a polished, pixel-perfect design optimized for both desktop and mobile.'
                 },
                 { 
                   text: 'Gaming Platform',

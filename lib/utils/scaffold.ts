@@ -55,6 +55,18 @@ const nextConfig = {
   experimental: {
     typedRoutes: true,
   },
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          // Allow embedding preview in the builder iframe
+          { key: 'X-Frame-Options', value: 'ALLOWALL' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'self' http://localhost:3000 http://127.0.0.1:3000;" },
+        ],
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

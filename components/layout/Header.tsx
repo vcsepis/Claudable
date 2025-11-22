@@ -41,7 +41,7 @@ export default function Header() {
             <div className="h-8">
               <Image
                 src="/Claudable_logo.svg"
-                alt="Claudable"
+                alt="monmi"
                 width={120}
                 height={32}
                 className="h-8 w-auto"

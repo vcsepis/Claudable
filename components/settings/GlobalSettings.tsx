@@ -368,7 +368,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 </span>
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900 ">Global Settings</h2>
-                  <p className="text-sm text-gray-600 ">Configure your Claudable preferences</p>
+                  <p className="text-sm text-gray-600 ">Configure your monmi preferences</p>
                 </div>
               </div>
               <button
@@ -738,20 +738,20 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                     <div className="absolute inset-0 bg-gradient-to-br from-[#DE7356]/20 to-[#DE7356]/5 blur-xl rounded-2xl" />
                     <Image
                       src="/Claudable_Icon.png"
-                      alt="Claudable Icon"
+                      alt="monmi Icon"
                       width={80}
                       height={80}
                       className="relative z-10 w-full h-full object-contain rounded-2xl shadow-lg"
                     />
                   </div>
-                  <h3 className="text-2xl font-bold text-gray-900 ">Claudable</h3>
+                  <h3 className="text-2xl font-bold text-gray-900 ">monmi</h3>
                   <p className="text-gray-600 mt-2 font-medium">Version 1.0.0</p>
                 </div>
                 
                 <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 space-y-4">
                   <div className="text-center">
                     <p className="text-base text-gray-700 leading-relaxed max-w-2xl mx-auto">
-                      Claudable is an AI-powered development platform that integrates with GitHub, Supabase, and Vercel 
+                      monmi is an AI-powered development platform that integrates with GitHub, Supabase, and Vercel 
                       to streamline your web development workflow.
                     </p>
                   </div>

@@ -20,6 +20,30 @@ import {
   markUserRequestAsFailed,
 } from '@/lib/services/user-requests';
 
+function resolveAnthropicApiKey(): string {
+  const envKey =
+    process.env.ANTHROPIC_API_KEY?.trim() ||
+    process.env.CLAUDE_API_KEY?.trim() ||
+    process.env.ANTHROPIC_AUTH_TOKEN?.trim();
+
+  if (!envKey) {
+    throw new Error(
+      'Missing Claude API key. Set ANTHROPIC_API_KEY in your environment (e.g. .env.local) to use Claude.'
+    );
+  }
+
+  // Normalize env so the SDK can read it consistently
+  process.env.ANTHROPIC_API_KEY = envKey;
+  if (!process.env.ANTHROPIC_AUTH_TOKEN) {
+    process.env.ANTHROPIC_AUTH_TOKEN = envKey;
+  }
+  if (!process.env.ANTHROPIC_BASE_URL) {
+    process.env.ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
+  }
+
+  return envKey;
+}
+
 type ToolAction = 'Edited' | 'Created' | 'Read' | 'Deleted' | 'Generated' | 'Searched' | 'Executed';
 
 const TOOL_NAME_ACTION_MAP: Record<string, ToolAction> = {
@@ -571,6 +595,20 @@ export async function executeClaude(
   console.log(`\n========================================`);
   console.log(`[ClaudeService] 🚀 Starting Claude Agent SDK`);
   console.log(`[ClaudeService] Project: ${projectId}`);
+  try {
+    resolveAnthropicApiKey();
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Missing Claude API key. Set ANTHROPIC_API_KEY in your environment.';
+    streamManager.publish(projectId, {
+      type: 'error',
+      error: message,
+      data: requestId ? { requestId } : undefined,
+    });
+    throw new Error(message);
+  }
   const resolvedModel = resolveModelId(model);
   const modelLabel = getClaudeModelDisplayName(resolvedModel);
   const aliasNote = resolvedModel !== model ? ` (alias for ${model})` : '';
@@ -729,6 +767,7 @@ export async function executeClaude(
 - Use Tailwind CSS for styling
 - Write clean, production-ready code
 - Follow best practices
+- Aim for lovable.dev-level polish: bold, responsive layouts, smooth animations, thoughtful spacing, and high-quality UI states (loading/empty/error).
 - The platform automatically installs dependencies and manages the preview dev server. Do not run package managers or dev-server commands yourself; rely on the existing preview.
 - Keep all project files directly in the project root. Never scaffold frameworks into subdirectories (avoid commands like "mkdir new-app" or "create-next-app my-app"; run generators against the current directory instead).
 - Never override ports or start your own development server processes. Rely on the managed preview service which assigns ports from the approved pool.
@@ -1097,11 +1136,11 @@ export async function executeClaude(
 
       // Detect Claude Code CLI not installed
       if (errorMessage.includes('command not found') || errorMessage.includes('not found: claude')) {
-        errorMessage = `Claude Code CLI is not installed.\n\nInstallation instructions:\n1. npm install -g @anthropic-ai/claude-code\n2. claude auth login`;
+        errorMessage = `Claude Code CLI is not installed.\n\nInstallation instructions:\n1. npm install -g @anthropic-ai/claude-code\n2. claude auth login\n\nOr set ANTHROPIC_API_KEY in your environment.`;
       }
       // Detect authentication failure
       else if (errorMessage.includes('not authenticated') || errorMessage.includes('authentication')) {
-        errorMessage = `Claude Code CLI authentication required.\n\nAuthentication method:\nclaude auth login`;
+        errorMessage = `Claude API key missing or invalid. Set ANTHROPIC_API_KEY in your environment (e.g. .env.local) and restart.`;
       }
       // Permission error
       else if (errorMessage.includes('permission') || errorMessage.includes('EACCES')) {

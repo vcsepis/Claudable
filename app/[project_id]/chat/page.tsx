@@ -836,16 +836,31 @@ const persistProjectPreferences = useCallback(
     }
   }, [projectId]);
 
+  const resolveApiBase = useCallback(() => {
+    const envBase = API_BASE?.trim();
+    if (envBase) return envBase.replace(/\/+$/, '');
+    if (typeof window !== 'undefined') {
+      return window.location.origin;
+    }
+    return '';
+  }, []);
+
   const loadSubdirectory = useCallback(async (dir: string): Promise<Entry[]> => {
     try {
-      const r = await fetch(`${API_BASE}/api/repo/${projectId}/tree?dir=${encodeURIComponent(dir)}`);
+      const base = resolveApiBase();
+      const url = `${base}/api/repo/${projectId}/tree?dir=${encodeURIComponent(dir)}`;
+      const r = await fetch(url);
+      if (!r.ok) {
+        console.warn('Failed to load subdirectory: HTTP', r.status, r.statusText);
+        return [];
+      }
       const data = await r.json();
       return Array.isArray(data) ? data : [];
     } catch (error) {
       console.error('Failed to load subdirectory:', error);
       return [];
     }
-  }, [projectId]);
+  }, [projectId, resolveApiBase]);
 
   const loadTree = useCallback(async (dir = '.') => {
     try {
@@ -1687,6 +1702,12 @@ const persistProjectPreferences = useCallback(
       return;
     }
 
+    // Ensure preview is spinning up early so user perceives progress
+    if (!previewUrlRef.current && !isStartingPreview) {
+      setPreviewInitializationMessage('Starting preview server for your request...');
+      void start();
+    }
+
     // Add additional instructions in Chat Mode
     if (mode === 'chat') {
       finalMessage = finalMessage + "\n\nDo not modify code, only answer to the user's request.";
@@ -2312,7 +2333,7 @@ const persistProjectPreferences = useCallback(
                   runAct(message, images);
                 }}
                 disabled={isRunning}
-                placeholder={mode === 'act' ? "Ask Claudable..." : "Chat with Claudable..."}
+                placeholder={mode === 'act' ? "Ask monmi..." : "Chat with monmi..."}
                 mode={mode}
                 onModeChange={setMode}
                 projectId={projectId}

@@ -851,16 +851,22 @@ class PreviewManager {
     env.NEXT_PUBLIC_APP_URL = resolvedUrl;
     previewProcess.url = resolvedUrl;
 
-    const child = spawn(
-      npmCommand,
-      ['run', 'dev', '--', '--port', String(effectivePort)],
-      {
-        cwd: projectPath,
-        env,
-        shell: process.platform === 'win32',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
+    // Prefer turbopack if explicitly enabled to speed up dev server boot
+    const useTurbo = process.env.PREVIEW_USE_TURBO === '1';
+    const devArgs = useTurbo
+      ? ['run', 'dev', '--', '--turbo', '--port', String(effectivePort)]
+      : ['run', 'dev', '--', '--port', String(effectivePort)];
+
+    const child = spawn(npmCommand, devArgs, {
+      cwd: projectPath,
+      env: {
+        ...env,
+        NEXT_TELEMETRY_DISABLED: '1',
+        BROWSERSLIST_IGNORE_OLD_DATA: '1',
+      },
+      shell: process.platform === 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
     previewProcess.process = child;
     this.processes.set(projectId, previewProcess);

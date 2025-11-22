@@ -1,6 +1,6 @@
-# Claudable
+# monmi
 
-<img src="https://storage.googleapis.com/claudable-assets/Claudable.png" alt="Claudable" style="width: 100%;" />
+<img src="https://storage.googleapis.com/claudable-assets/Claudable.png" alt="monmi" style="width: 100%;" />
 <div align="center">
 <h3>Connect CLI Agent • Build what you want • Deploy instantly</h3>
 
@@ -30,13 +30,13 @@
 </a>
 </p>
 
-## What is Claudable?
+## What is monmi?
 
-Claudable is a powerful Next.js-based web app builder that combines **C**laude Code's (Cursor CLI also supported!) advanced AI agent capabilities with **Lovable**'s simple and intuitive app building experience. Just describe your app idea - "I want a task management app with dark mode" - and watch as Claudable instantly generates the code and shows you a live preview of your working app. You can deploy your app to Vercel and integrate database with Supabase for free.
+monmi is a powerful Next.js-based web app builder that combines **C**laude Code's (Cursor CLI also supported!) advanced AI agent capabilities with **Lovable**'s simple and intuitive app building experience. Just describe your app idea - "I want a task management app with dark mode" - and watch as monmi instantly generates the code and shows you a live preview of your working app. You can deploy your app to Vercel and integrate database with Supabase for free.
 
 This open-source project empowers you to build and deploy professional web applications easily for **free**.
 
-How to start? Simply login to Claude Code (or Cursor CLI), start Claudable, and describe what you want to build. That's it. There is no additional subscription cost for app builder.
+How to start? Simply login to Claude Code (or Cursor CLI), start monmi, and describe what you want to build. That's it. There is no additional subscription cost for app builder.
 
 ## Try Clink - Web Service
 <div align="center">
@@ -49,7 +49,7 @@ How to start? Simply login to Claude Code (or Cursor CLI), start Claudable, and 
 ## Features
 
 - **Powerful Agent Performance**: Leverage the full power of Claude Code and Cursor CLI Agent capabilities
-- **Natural Language to Code**: Simply describe what you want to build, and Claudable generates production-ready Next.js code
+- **Natural Language to Code**: Simply describe what you want to build, and monmi generates production-ready Next.js code
 - **Instant Preview**: See your changes immediately with hot-reload as AI builds your app
 - **Zero Setup, Instant Launch**: No complex sandboxes, no API key, no database headaches - just start building immediately
 - **Beautiful UI**: Generate beautiful UI with Tailwind CSS and shadcn/ui
@@ -60,7 +60,7 @@ How to start? Simply login to Claude Code (or Cursor CLI), start Claudable, and 
 
 ## Supported AI Coding Agents
 
-Claudable supports multiple AI coding agents, giving you the flexibility to choose the best tool for your needs:
+monmi supports multiple AI coding agents, giving you the flexibility to choose the best tool for your needs:
 
 - **Claude Code** - Anthropic's advanced AI coding agent
 - **Codex CLI** - OpenAI's powerful coding agent
@@ -136,7 +136,7 @@ Before you begin, ensure you have the following installed:
 
 ## Quick Start
 
-Get Claudable running on your local machine in minutes:
+Get monmi running on your local machine in minutes:
 
 ```bash
 # Clone the repository
@@ -155,7 +155,7 @@ Your application will be available at http://localhost:3000
 **Note**: Ports are automatically detected. If the default port is in use, the next available port will be assigned.
 
 ## Troubleshooting
-- **Database migration conflicts**: If you upgraded from a previous Claudable version and run into database errors, reset the Prisma database so it matches the latest schema:
+- **Database migration conflicts**: If you upgraded from a previous monmi version and run into database errors, reset the Prisma database so it matches the latest schema:
   ```bash
   npm run prisma:reset
   ```
@@ -171,7 +171,7 @@ The `npm install` command automatically handles the complete setup:
 
 ### Desktop App (Electron)
 
-Build and run Claudable as a desktop application:
+Build and run monmi as a desktop application:
 
 ```bash
 # Development mode
@@ -214,7 +214,7 @@ npm run clean       # Remove all dependencies
 
 ### Database Operations
 
-Claudable uses SQLite for local development. The database automatically initializes on first run.
+monmi uses SQLite for local development. The database automatically initializes on first run.
 
 ## Troubleshooting
 
@@ -242,7 +242,7 @@ If you encounter the error: `Error output dangerously skip permissions cannot be
    whoami
    
    # Change ownership of project directory to current user
-   sudo chown -R $(whoami):$(whoami) ~/Claudable
+   sudo chown -R $(whoami):$(whoami) ~/monmi
    ```
 3. If using WSL, make sure you're running Claude Code from your user account, not root
 4. Verify Claude Code installation permissions:

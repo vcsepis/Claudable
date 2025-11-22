@@ -717,7 +717,7 @@ async function executeGLM(
         'Ensure the DevPack CLI is installed and available on your PATH:',
         '- Install: `zai devpack install claude`',
         '- Verify: `claude --version`',
-        '- Restart Claudable after installation',
+        '- Restart monmi after installation',
       ].join('\n');
     }
 

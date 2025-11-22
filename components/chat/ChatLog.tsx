@@ -9,6 +9,7 @@ import ThinkingSection from './ThinkingSection';
 import type { ChatMessage, RealtimeEvent, RealtimeStatus } from '@/types';
 import { toChatMessage, normalizeChatContent } from '@/lib/serializers/client/chat';
 import { toRelativePath } from '@/lib/utils/path';
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 type ToolAction = 'Edited' | 'Created' | 'Read' | 'Deleted' | 'Generated' | 'Searched' | 'Executed';
 
@@ -1005,9 +1006,11 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const [needsHistoryRefresh, setNeedsHistoryRefresh] = useState(false);
+  const supabaseChannelRef = useRef<ReturnType<ReturnType<typeof getSupabaseBrowserClient>['channel']> | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedInitialDataRef = useRef(false);
@@ -1700,7 +1703,11 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
     const metadata = message.metadata as Record<string, unknown> | null | undefined;
     const content = normalizeChatContent(message.content);
 
-    if (message.messageType === 'tool_use') {
+    if (
+      message.role === 'tool' ||
+      message.messageType === 'tool_use' ||
+      (typeof message.messageType === 'string' && message.messageType.includes('tool'))
+    ) {
       return true;
     }
 
@@ -1879,10 +1886,18 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
       if (shouldShowLoading) {
         setIsLoading(true);
       }
+      setHistoryError(null);
 
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(new Error('timeout')), 12000);
+
         // Load more messages per request to reduce pagination needs
-        const response = await fetch(`${API_BASE}/api/chat/${projectId}/messages?limit=200&offset=0`);
+        const response = await fetch(`${API_BASE}/api/chat/${projectId}/messages?limit=200&offset=0`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
         if (response.ok) {
           didSucceed = true;
           const payload = await response.json();
@@ -1924,8 +1939,16 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
           });
 
           setMessages((prev) => integrateMessages(prev, normalized));
+          setHistoryError(null);
+        } else {
+          const errorText = await response.text().catch(() => '');
+          const message = `Failed to load chat history (${response.status}). ${errorText || ''}`.trim();
+          setHistoryError(message);
         }
       } catch (error) {
+        const isAbort = (error as any)?.name === 'AbortError' || (error as any)?.message === 'timeout';
+        const message = isAbort ? 'Chat history request timed out. Please retry.' : 'Failed to load chat history. Please retry.';
+        setHistoryError(message);
         if (process.env.NODE_ENV === 'development') {
           console.warn('Failed to load chat history (network issue):', error);
         }
@@ -2737,6 +2760,49 @@ const ToolResultMessage = ({
     }
   }, [onAddUserMessage]);
 
+  // Supabase Realtime subscription to accelerate chat delivery
+  useEffect(() => {
+    let isActive = true;
+    const supabase = (() => {
+      try {
+        return getSupabaseBrowserClient();
+      } catch (error) {
+        console.warn('[ChatLog] Supabase client unavailable:', error);
+        return null;
+      }
+    })();
+
+    if (!supabase) return;
+
+    const channelName = `chat:${projectId}`;
+    const channel = supabase
+      .channel(channelName, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'message' }, (payload) => {
+        if (!isActive) return;
+        const incoming = payload?.payload as ChatMessage | undefined;
+        if (!incoming || incoming.projectId !== projectId) return;
+        setMessages((prev) => integrateMessages(prev, [incoming]));
+      });
+
+    supabaseChannelRef.current = channel;
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('[ChatLog] Supabase realtime subscribed:', channelName);
+      } else if (status === 'CHANNEL_ERROR') {
+        console.warn('[ChatLog] Supabase channel error:', channelName);
+      }
+    });
+
+    return () => {
+      isActive = false;
+      if (supabaseChannelRef.current) {
+        supabase.removeChannel(supabaseChannelRef.current);
+        supabaseChannelRef.current = null;
+      }
+    };
+  }, [projectId]);
+
   return (
     <div className="flex flex-col h-full bg-white ">
 
@@ -2780,9 +2846,34 @@ const ToolResultMessage = ({
       <div className="flex-1 overflow-y-auto px-8 py-3 space-y-2 custom-scrollbar ">
         {isLoading && !hasLoadedOnce && !hasError && (
           <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
-            <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mb-2 mx-auto"></div>
+            <div className="flex flex-col items-center gap-2">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto"></div>
               <p>Loading chat history...</p>
+              {historyError && (
+                <button
+                  onClick={() => loadChatHistory({ showLoading: true })}
+                  className="px-3 py-1 text-xs text-white bg-gray-800 rounded-md hover:bg-gray-700 transition-colors"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!isLoading && historyError && (
+          <div className="mx-8 mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1">
+                <p className="font-medium">Chat history could not be loaded.</p>
+                <p className="text-xs mt-1">{historyError}</p>
+              </div>
+              <button
+                onClick={() => loadChatHistory({ showLoading: true })}
+                className="px-3 py-1 text-xs text-white bg-gray-800 rounded-md hover:bg-gray-700 transition-colors"
+              >
+                Retry
+              </button>
             </div>
           </div>
         )}
