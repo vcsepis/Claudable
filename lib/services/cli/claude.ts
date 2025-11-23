@@ -4,7 +4,7 @@
  * Interacts with projects using the Claude Agent SDK.
  */
 
-import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKMessage, type PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import type { ClaudeSession, ClaudeResponse } from '@/types/backend';
 import { streamManager } from '../stream';
 import { serializeMessage, createRealtimeMessage } from '@/lib/serializers/chat';
@@ -43,6 +43,25 @@ function resolveAnthropicApiKey(): string {
 
   return envKey;
 }
+
+const PERMISSION_MODE_CHOICES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+
+const resolvePermissionMode = (isRootUser: boolean): PermissionMode => {
+  const rawMode = process.env.CLAUDE_PERMISSION_MODE?.trim();
+  if (rawMode) {
+    const normalized = rawMode as PermissionMode;
+    if (PERMISSION_MODE_CHOICES.includes(normalized)) {
+      return normalized;
+    }
+    if (rawMode.toLowerCase() === 'manual') {
+      console.warn('[ClaudeService] Permission mode "manual" is no longer supported; falling back to "default".');
+      return 'default';
+    }
+    const fallback = isRootUser ? 'default' : 'bypassPermissions';
+    console.warn(`[ClaudeService] Unknown permission mode "${rawMode}", falling back to "${fallback}".`);
+  }
+  return isRootUser ? 'default' : 'bypassPermissions';
+};
 
 type ToolAction = 'Edited' | 'Created' | 'Read' | 'Deleted' | 'Generated' | 'Searched' | 'Executed';
 
@@ -635,9 +654,8 @@ export async function executeClaude(
       ? 4096
       : undefined;
 
-  // Avoid SDK hard-failing when running as root with bypassPermissions (it requires a special flag).
   const isRootUser = typeof process.getuid === 'function' && process.getuid() === 0;
-  const permissionMode = process.env.CLAUDE_PERMISSION_MODE?.trim() || (isRootUser ? 'manual' : 'bypassPermissions');
+  const permissionMode = resolvePermissionMode(isRootUser);
 
   let hasMarkedTerminalStatus = false;
   let emittedCompletedStatus = false;
@@ -782,7 +800,7 @@ export async function executeClaude(
         additionalDirectories: [absoluteProjectPath],
         model: resolvedModel,
         resume: sessionId, // Resume previous session
-        permissionMode, // Auto-approve when allowed; fall back to manual if running as root
+        permissionMode, // Auto-approve when allowed; fall back to safe defaults when root/invalid
         systemPrompt: `You are an expert web developer building a Next.js application.
 - Use Next.js 15 App Router
 - Use TypeScript
