@@ -635,6 +635,10 @@ export async function executeClaude(
       ? 4096
       : undefined;
 
+  // Avoid SDK hard-failing when running as root with bypassPermissions (it requires a special flag).
+  const isRootUser = typeof process.getuid === 'function' && process.getuid() === 0;
+  const permissionMode = process.env.CLAUDE_PERMISSION_MODE?.trim() || (isRootUser ? 'manual' : 'bypassPermissions');
+
   let hasMarkedTerminalStatus = false;
   let emittedCompletedStatus = false;
 
@@ -778,7 +782,7 @@ export async function executeClaude(
         additionalDirectories: [absoluteProjectPath],
         model: resolvedModel,
         resume: sessionId, // Resume previous session
-        permissionMode: 'bypassPermissions', // Auto-approve commands and edits
+        permissionMode, // Auto-approve when allowed; fall back to manual if running as root
         systemPrompt: `You are an expert web developer building a Next.js application.
 - Use Next.js 15 App Router
 - Use TypeScript

@@ -181,3 +181,13 @@ export function ensureGitRepository(repoPath: string) {
   }
   ensureGitignore(repoPath);
 }
+
+export function checkoutOrCreateBranch(repoPath: string, branch: string) {
+  try {
+    runGit(['rev-parse', '--verify', branch], repoPath);
+    runGit(['checkout', branch], repoPath);
+  } catch {
+    // Create the branch if it does not exist
+    runGit(['checkout', '-B', branch], repoPath);
+  }
+}

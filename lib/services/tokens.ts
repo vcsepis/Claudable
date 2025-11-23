@@ -92,6 +92,12 @@ export async function getPlainServiceToken(provider: string): Promise<string | n
   });
 
   if (!record) {
+    if (provider === 'github') {
+      const envToken = process.env.GITHUB_OAUTH_CLIENT_ID || process.env.GITHUB_TOKEN;
+      if (envToken && envToken.trim().length > 0) {
+        return envToken.trim();
+      }
+    }
     return null;
   }
 

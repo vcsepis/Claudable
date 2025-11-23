@@ -3,7 +3,15 @@ import fs from 'fs/promises';
 import { getPlainServiceToken } from '@/lib/services/tokens';
 import { getProjectById, updateProject } from '@/lib/services/project';
 import { getProjectService, upsertProjectServiceConnection, updateProjectServiceData } from '@/lib/services/project-services';
-import { ensureGitRepository, ensureGitConfig, initializeMainBranch, addOrUpdateRemote, commitAll, pushToRemote } from '@/lib/services/git';
+import {
+  ensureGitRepository,
+  ensureGitConfig,
+  initializeMainBranch,
+  addOrUpdateRemote,
+  commitAll,
+  pushToRemote,
+  checkoutOrCreateBranch,
+} from '@/lib/services/git';
 import type { GitHubUserInfo, CreateRepoOptions, GitHubRepositoryInfo } from '@/types/shared';
 
 class GitHubError extends Error {
@@ -129,6 +137,17 @@ function resolveProjectRepoPath(projectId: string, repoPath?: string | null) {
   return path.resolve(process.cwd(), process.env.PROJECTS_DIR || './data/projects', projectId);
 }
 
+function sanitizeBranchName(source: string | null | undefined, fallback: string) {
+  const base = (source ?? '').trim() || fallback;
+  const cleaned = base
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 100);
+  return cleaned || `project-${fallback}`;
+}
+
 export async function ensureProjectRepository(projectId: string, repoPath?: string | null) {
   const resolved = resolveProjectRepoPath(projectId, repoPath);
   await fs.mkdir(resolved, { recursive: true });
@@ -224,34 +243,67 @@ export async function pushProjectToGitHub(projectId: string) {
       throw new Error('Project not found');
     }
 
-    const token = await getPlainServiceToken('github');
+    const envToken = process.env.GITHUB_OAUTH_CLIENT_ID?.trim() || process.env.GITHUB_TOKEN?.trim() || null;
+    const token = (await getPlainServiceToken('github')) ?? envToken;
     if (!token) {
       throw new GitHubError('GitHub token not configured', 401);
     }
 
     const service = await getProjectService(projectId, 'github');
     const data = service?.serviceData as Record<string, any> | undefined;
-    if (!data?.clone_url || !data?.owner) {
+
+    const repoFromEnv = process.env.GITHUB_REPO?.trim();
+    const ownerFromEnv = process.env.GITHUB_OWNER?.trim();
+
+    let cloneUrl: string | undefined = typeof data?.clone_url === 'string' ? data.clone_url : undefined;
+    let owner: string | undefined = typeof data?.owner === 'string' ? data.owner : undefined;
+    let defaultBranch: string | undefined =
+      typeof data?.default_branch === 'string' && data.default_branch.trim().length > 0
+        ? data.default_branch
+        : 'main';
+    let repoName: string | undefined =
+      typeof data?.repo_name === 'string' && data.repo_name.trim().length > 0
+        ? data.repo_name
+        : repoFromEnv;
+
+    // Allow env-based fallback when no project-level GitHub connection exists
+    if ((!cloneUrl || !owner) && repoFromEnv) {
+      const user = await getGithubUser();
+      const login = ownerFromEnv || user.login;
+      owner = owner || login;
+      repoName = repoName || repoFromEnv;
+      cloneUrl = `https://github.com/${login}/${repoFromEnv}.git`;
+      defaultBranch = defaultBranch || 'main';
+    }
+
+    if (!cloneUrl || !owner) {
       throw new GitHubError('GitHub repository not connected', 404);
     }
 
     const repoPath = await ensureProjectRepository(projectId, project.repoPath);
     ensureGitRepository(repoPath);
-    const authenticatedUrl = String(data.clone_url).replace('https://', `https://${data.owner}:${token}@`);
+    const branchName = sanitizeBranchName(project.name, projectId);
+    const authenticatedUrl = String(cloneUrl).replace('https://', `https://${owner}:${token}@`);
     const user = await getGithubUser();
     const userName = user.name || user.login;
     const userEmail = user.email || `${user.login}@users.noreply.github.com`;
     ensureGitConfig(repoPath, userName, userEmail);
     addOrUpdateRemote(repoPath, 'origin', authenticatedUrl);
-    const committed = commitAll(repoPath, 'Update from monmi');
+    checkoutOrCreateBranch(repoPath, branchName);
+    const committed = commitAll(repoPath, `Update from monmi (${branchName})`);
     if (!committed) {
       console.log('[GitHubService] No changes to commit before push');
     }
 
-    pushToRemote(repoPath, 'origin', data.default_branch || 'main');
+    pushToRemote(repoPath, 'origin', branchName);
 
     await updateProjectServiceData(projectId, 'github', {
       last_pushed_at: new Date().toISOString(),
+      last_pushed_branch: branchName,
+      default_branch: defaultBranch,
+      repo_name: repoName,
+      owner,
+      clone_url: cloneUrl,
     });
   } catch (error) {
     if (error instanceof GitHubError) {

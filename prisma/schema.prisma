@@ -1,4 +1,4 @@
-// Claudable - Prisma Schema (PostgreSQL)
+﻿// Claudable - Prisma Schema (PostgreSQL)
 // Supports Supabase / Postgres deployments
 
 generator client {
