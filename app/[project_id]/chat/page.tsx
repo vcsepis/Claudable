@@ -31,6 +31,8 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
+const MONMI_LOGO_URL = 'https://monmi.au/assets/monmi-logo-qBVbzZlt.jpg';
+
 const assistantBrandColors = ACTIVE_CLI_BRAND_COLORS;
 
 const CLI_LABELS = ACTIVE_CLI_NAME_MAP;
@@ -281,6 +283,10 @@ export default function ChatPage() {
   const lineNumberRef = useRef<HTMLDivElement>(null);
   const editedContentRef = useRef<string>('');
   const [isFileUpdating, setIsFileUpdating] = useState(false);
+  const isDeepThinkingSupported = useMemo(
+    () => preferredCli === 'claude' && (selectedModel?.includes('sonnet-4-5') ?? false),
+    [preferredCli, selectedModel],
+  );
   const activeBrandColor =
     assistantBrandColors[preferredCli] || assistantBrandColors[DEFAULT_ACTIVE_CLI];
   const modelOptions = useMemo(() => buildModelOptions(cliStatuses), [cliStatuses]);
@@ -314,6 +320,46 @@ export default function ChatPage() {
     previewUrlRef.current = previewUrl;
   }, [previewUrl]);
 
+  useEffect(() => {
+    if (!isDeepThinkingSupported && thinkingMode) {
+      setThinkingMode(false);
+    }
+  }, [isDeepThinkingSupported, thinkingMode]);
+
+  const shouldAutoEnableDeepThinking = useCallback((text: string, imageCount: number) => {
+    const normalized = (text || '').toLowerCase();
+    if (!normalized) return false;
+
+    const charCount = normalized.length;
+    const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+    const keywordTriggers = [
+      'architecture',
+      'system design',
+      'roadmap',
+      'migration',
+      'refactor',
+      'optimize',
+      'performance',
+      'scalability',
+      'data model',
+      'database schema',
+      'multi step',
+      'multi-step',
+      'deep analysis',
+      'reason through',
+      'long context',
+    ];
+
+    const keywordHit = keywordTriggers.some(keyword => normalized.includes(keyword));
+
+    return (
+      charCount >= 800 ||
+      wordCount >= 120 ||
+      keywordHit ||
+      imageCount >= 2
+    );
+  }, []);
+
   const sendInitialPrompt = useCallback(async (initialPrompt: string) => {
     if (initialPromptSent) {
       return;
@@ -328,6 +374,9 @@ export default function ChatPage() {
       setIsRunning(true);
       setInitialPromptSent(true);
 
+      const autoDeepThinking = isDeepThinkingSupported && shouldAutoEnableDeepThinking(initialPrompt, 0);
+      const deepThinkingEnabled = isDeepThinkingSupported && (thinkingMode || autoDeepThinking);
+
       const requestBody = {
         instruction: initialPrompt,
         images: [],
@@ -336,6 +385,7 @@ export default function ChatPage() {
         conversationId: conversationId || undefined,
         requestId,
         selectedModel,
+        deepThinking: deepThinkingEnabled,
       };
 
       const r = await fetch(`${API_BASE}/api/chat/${projectId}/act`, {
@@ -1726,6 +1776,8 @@ const persistProjectPreferences = useCallback(
   async function runAct(messageOverride?: string, externalImages?: any[]) {
     let finalMessage = messageOverride || prompt;
     const imagesToUse = externalImages || uploadedImages;
+    const autoDeepThinking = isDeepThinkingSupported && shouldAutoEnableDeepThinking(finalMessage, imagesToUse.length);
+    const deepThinkingEnabled = isDeepThinkingSupported && (thinkingMode || autoDeepThinking);
 
     if (!finalMessage.trim() && imagesToUse.length === 0) {
       alert('Please enter a task description or upload an image.');
@@ -1749,7 +1801,8 @@ const persistProjectPreferences = useCallback(
       imageCount: imagesToUse.length,
       cliPreference: preferredCli,
       model: selectedModel,
-      mode
+      mode,
+      deepThinking: deepThinkingEnabled,
     });
 
     // Check for duplicate pending requests
@@ -1870,6 +1923,7 @@ const persistProjectPreferences = useCallback(
         conversationId: conversationId || undefined,
         requestId,
         selectedModel,
+        deepThinking: deepThinkingEnabled,
       };
 
       console.log('📸 Sending request to act API:', {
@@ -2804,17 +2858,13 @@ const persistProjectPreferences = useCallback(
                         className="text-center"
                       >
                         {/* Claudable Symbol with loading spinner */}
-                        <div className="w-40 h-40 mx-auto mb-6 relative">
-                          <div 
-                            className="w-full h-full"
-                            style={{
-                              backgroundColor: activeBrandColor,
-                              mask: 'url(/Symbol_white.png) no-repeat center/contain',
-                              WebkitMask: 'url(/Symbol_white.png) no-repeat center/contain',
-                              opacity: 0.9
-                            }}
+                        <div className="w-40 h-40 mx-auto mb-6 relative rounded-2xl bg-gradient-to-br from-[#fff5f0] via-white to-[#ffe9e0] shadow-lg flex items-center justify-center">
+                          <img
+                            src={MONMI_LOGO_URL}
+                            alt="monmi"
+                            className="max-h-24 w-auto object-contain"
+                            loading="lazy"
                           />
-                          
                           {/* Loading spinner in center */}
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div 
@@ -2874,17 +2924,15 @@ const persistProjectPreferences = useCallback(
                                 animate={{ rotate: 360 }}
                                 transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
                                 style={{ transformOrigin: "center center" }}
-                                className="w-full h-full"
                               >
-                          <div 
-                            className="w-full h-full"
-                            style={{
-                              backgroundColor: activeBrandColor,
-                              mask: 'url(/Symbol_white.png) no-repeat center/contain',
-                              WebkitMask: 'url(/Symbol_white.png) no-repeat center/contain',
-                              opacity: 0.9
-                            }}
-                          />
+                                <div className="w-full h-full rounded-2xl bg-gradient-to-br from-[#fff5f0] via-white to-[#ffe9e0] shadow-lg flex items-center justify-center">
+                                  <img
+                                    src={MONMI_LOGO_URL}
+                                    alt="monmi"
+                                    className="max-h-24 w-auto object-contain"
+                                    loading="lazy"
+                                  />
+                                </div>
                               </MotionDiv>
                             </div>
                             
@@ -2925,21 +2973,20 @@ const persistProjectPreferences = useCallback(
                               onClick={!isRunning && !isStartingPreview ? start : undefined}
                               className={`w-40 h-40 mx-auto mb-6 relative ${!isRunning && !isStartingPreview ? 'cursor-pointer group' : ''}`}
                             >
-                              {/* Claudable Symbol with rotating animation when starting */}
+                              {/* monmi Logo with optional rotation when starting */}
                               <MotionDiv
                                 className="w-full h-full"
                                 animate={isStartingPreview ? { rotate: 360 } : {}}
                                 transition={{ duration: 6, repeat: isStartingPreview ? Infinity : 0, ease: "linear" }}
                               >
-                                <div 
-                                  className="w-full h-full"
-                                  style={{
-                                    backgroundColor: activeBrandColor,
-                                    mask: 'url(/Symbol_white.png) no-repeat center/contain',
-                                    WebkitMask: 'url(/Symbol_white.png) no-repeat center/contain',
-                                    opacity: 0.9
-                                  }}
-                                />
+                                <div className="w-full h-full rounded-2xl bg-gradient-to-br from-[#fff5f0] via-white to-[#ffe9e0] shadow-lg flex items-center justify-center">
+                                  <img
+                                    src={MONMI_LOGO_URL}
+                                    alt="monmi"
+                                    className="max-h-24 w-auto object-contain"
+                                    loading="lazy"
+                                  />
+                                </div>
                               </MotionDiv>
                               
                               {/* Icon in Center - Play or Loading */}

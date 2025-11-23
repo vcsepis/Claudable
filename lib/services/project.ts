@@ -36,7 +36,7 @@ export async function getProjectById(id: string): Promise<Project | null> {
     where: { id },
   });
   if (!project) return null;
-  return {
+ return {
     ...project,
     selectedModel: normalizeModelId(project.preferredCli ?? 'claude', project.selectedModel ?? undefined),
   } as Project;
@@ -46,33 +46,67 @@ export async function getProjectById(id: string): Promise<Project | null> {
  * Create new project
  */
 export async function createProject(input: CreateProjectInput): Promise<Project> {
-  // Create project directory
-  const projectPath = path.join(PROJECTS_DIR_ABSOLUTE, input.project_id);
-  await fs.mkdir(projectPath, { recursive: true });
+  const maxRetries = 3;
+  const baseId = input.project_id || `project-${Date.now()}`;
+  let currentId = baseId;
+  let lastError: unknown;
 
-  // Create project in database
-  const project = await prisma.project.create({
-    data: {
-      id: input.project_id,
-      name: input.name,
-      description: input.description,
-      initialPrompt: input.initialPrompt,
-      repoPath: projectPath,
-      preferredCli: input.preferredCli || 'claude',
-      selectedModel: normalizeModelId(input.preferredCli || 'claude', input.selectedModel ?? getDefaultModelForCli(input.preferredCli || 'claude')),
-      status: 'idle',
-      templateType: 'nextjs',
-      lastActiveAt: new Date(),
-      previewUrl: null,
-      previewPort: null,
-    },
-  });
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+    try {
+      const projectPath = path.join(PROJECTS_DIR_ABSOLUTE, currentId);
+      await fs.mkdir(projectPath, { recursive: true });
 
-  console.log(`[ProjectService] Created project: ${project.id}`);
-  return {
-    ...project,
-    selectedModel: normalizeModelId(project.preferredCli ?? 'claude', project.selectedModel ?? undefined),
-  } as Project;
+      const project = await prisma.project.create({
+        data: {
+          id: currentId,
+          name: input.name,
+          description: input.description,
+          initialPrompt: input.initialPrompt,
+          repoPath: projectPath,
+          preferredCli: input.preferredCli || 'claude',
+          selectedModel: normalizeModelId(
+            input.preferredCli || 'claude',
+            input.selectedModel ?? getDefaultModelForCli(input.preferredCli || 'claude')
+          ),
+          status: 'idle',
+          templateType: 'nextjs',
+          lastActiveAt: new Date(),
+          previewUrl: null,
+          previewPort: null,
+        },
+      });
+
+      console.log(`[ProjectService] Created project: ${project.id}`);
+      return {
+        ...project,
+        selectedModel: normalizeModelId(project.preferredCli ?? 'claude', project.selectedModel ?? undefined),
+      } as Project;
+    } catch (error: any) {
+      lastError = error;
+
+      // Duplicate ID collision (concurrent requests with same id)
+      if (error?.code === 'P2002' && attempt < maxRetries) {
+        const suffix = Math.random().toString(36).slice(2, 7);
+        const newId = `${baseId}-${suffix}`;
+        console.warn(
+          `[ProjectService] Duplicate project id "${currentId}", retrying with "${newId}" (attempt ${
+            attempt + 1
+          }/${maxRetries})`
+        );
+        currentId = newId;
+        continue;
+      }
+
+      // Connection issues
+      if (error?.code === 'P1001' || error?.code === 'P1008') {
+        throw new Error('Database connection unavailable or timed out. Please retry.');
+      }
+
+      throw error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Failed to create project after retries');
 }
 
 /**

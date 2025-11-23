@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   title: 'monmi',
   description: 'monmi Application',
   icons: {
-    icon: '/Claudable_Icon.png',
+    icon: 'https://monmi.au/assets/monmi-logo-qBVbzZlt.jpg',
   },
 }
 

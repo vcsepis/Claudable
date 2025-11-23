@@ -23,6 +23,8 @@ import {
   type ActiveCliId,
 } from '@/lib/utils/cliOptions';
 
+const MONMI_LOGO_URL = 'https://monmi.au/assets/monmi-logo-qBVbzZlt.jpg';
+
 // Ensure fetch is available
 const fetchAPI = globalThis.fetch || fetch;
 
@@ -473,6 +475,7 @@ export default function HomePage() {
     if ((!prompt.trim() && uploadedImages.length === 0) || isCreatingProject) return;
     
     setIsCreatingProject(true);
+    showToast('Creating project...', 'success');
     
     // Generate a unique project ID
     const projectId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -549,31 +552,31 @@ export default function HomePage() {
         }
       }
       
-      // Execute initial prompt directly with images
+            // Execute initial prompt directly with images (fire-and-forget so navigation is instant)
       if (prompt.trim()) {
-        try {
-          const actResponse = await fetchAPI(`${API_BASE}/api/chat/${createdProjectId}/act`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              instruction: prompt.trim(), // Original prompt without image paths
-              images: imageData,
-              isInitialPrompt: true,
-              cliPreference: selectedAssistant,
-              selectedModel
-            })
+        const actPayload = {
+          instruction: prompt.trim(),
+          images: imageData,
+          isInitialPrompt: true,
+          cliPreference: selectedAssistant,
+          selectedModel,
+        };
+
+        fetchAPI(`${API_BASE}/api/chat/${createdProjectId}/act`, {
+          method: 'POST',
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(actPayload),
+        })
+          .then(async (actResponse) => {
+            if (!actResponse.ok) {
+              console.error("ACT failed:", await actResponse.text());
+            }
+          })
+          .catch((actError) => {
+            console.error("ACT API error:", actError);
           });
-          
-          if (actResponse.ok) {
-            // Successfully kicked off ACT with image payloads
-          } else {
-            console.error('❌ ACT failed:', await actResponse.text());
-          }
-        } catch (actError) {
-          console.error('❌ ACT API error:', actError);
-        }
       }
-      
+
       // Navigate to chat page with model and CLI parameters
       uploadedImages.forEach(image => {
         if (image.url) {
@@ -586,7 +589,10 @@ export default function HomePage() {
       const params = new URLSearchParams();
       if (selectedAssistant) params.set('cli', selectedAssistant);
       if (selectedModel) params.set('model', selectedModel);
-      router.push(`/${createdProjectId}/chat${params.toString() ? '?' + params.toString() : ''}`);
+      const targetUrl = `/${createdProjectId}/chat${params.toString() ? '?' + params.toString() : ''}`;
+      showToast('Opening workspace...', 'success');
+      // Trigger navigation immediately; ACT will continue in background
+      router.push(targetUrl);
       
     } catch (error) {
       console.error('Failed to create project:', error);
@@ -905,28 +911,26 @@ export default function HomePage() {
       </div>
       
       {/* Main Content - Not affected by sidebar */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div
+        className="flex-1 flex flex-col min-w-0"
+        style={{
+          background:
+            'radial-gradient(circle at 50% 10%, rgba(255, 214, 153, 0.38), transparent 45%), linear-gradient(180deg, #fffaf0 0%, #fff5e0 55%, #fff2d8 100%)',
+        }}
+      >
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="w-full max-w-4xl">
             <div className="text-center mb-12">
               <div className="flex justify-center mb-6">
-                <h1 
-                  className="font-extrabold tracking-tight select-none transition-colors duration-1000 ease-in-out"
-                  style={{
-                    fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                    color: (assistantBrandColors[selectedAssistant] || assistantBrandColors.claude),
-                    letterSpacing: '-0.06em',
-                    fontWeight: 800,
-                    fontSize: '72px',
-                    lineHeight: '72px'
-                  }}
-                >
-                  monmi
-                </h1>
+                <div className="px-7 py-6 rounded-3xl shadow-md bg-gradient-to-br from-[#fff0c2] via-white to-[#ffe8a6] border border-[#ffd980]/80">
+                  <img
+                    src={MONMI_LOGO_URL}
+                    alt="monmi"
+                    className="h-24 w-auto object-contain"
+                    loading="lazy"
+                  />
+                </div>
               </div>
-              <p className="text-xl text-gray-700 font-light tracking-tight">
-                Connect CLI Agent • Build what you want • Deploy instantly
-              </p>
             </div>
             
             {/* Image thumbnails */}
@@ -962,11 +966,14 @@ export default function HomePage() {
               onDragLeave={handleDragLeave}
               onDragOver={handleDragOver}
               onDrop={handleDrop}
-              className={`group flex flex-col gap-4 p-4 w-full rounded-[28px] border backdrop-blur-xl text-base shadow-xl transition-all duration-150 ease-in-out mb-6 relative overflow-visible ${
+              className={`group flex flex-col gap-4 p-5 w-full rounded-[32px] text-base shadow-[0_24px_80px_rgba(0,0,0,0.08)] transition-all duration-200 ease-out mb-8 relative overflow-visible bg-white/90 backdrop-blur-xl ring-1 ${
                 isDragOver 
-                  ? 'border-[#DE7356] bg-[#DE7356]/10 ' 
-                  : 'border-gray-200 bg-white '
+                  ? 'ring-2 ring-[#DE7356]/70 bg-[#fff2ec]' 
+                  : 'ring-gray-200'
               }`}
+              style={{
+                backgroundImage: 'radial-gradient(circle at 20% 20%, rgba(222,115,86,0.05), transparent 40%), radial-gradient(circle at 80% 0%, rgba(222,115,86,0.08), transparent 45%)'
+              }}
             >
               <div className="relative flex flex-1 items-center">
                 <textarea
@@ -974,8 +981,8 @@ export default function HomePage() {
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Ask monmi to create a blog about..."
                   disabled={isCreatingProject}
-                  className="flex w-full rounded-md px-2 py-2 placeholder:text-gray-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent focus:bg-transparent flex-1 text-gray-900 overflow-y-auto"
-                  style={{ height: '120px' }}
+                  className="flex w-full rounded-xl px-3 py-2.5 placeholder:text-gray-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[17px] leading-relaxed md:text-base focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent focus:bg-transparent flex-1 text-gray-900 overflow-y-auto"
+                  style={{ minHeight: '140px' }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       if (e.metaKey || e.ctrlKey) {
@@ -992,7 +999,7 @@ export default function HomePage() {
               
               {/* Drag overlay */}
               {isDragOver && (
-                <div className="absolute inset-0 bg-[#DE7356]/10 rounded-[28px] flex items-center justify-center z-10 border-2 border-dashed border-[#DE7356]">
+                <div className="absolute inset-0 bg-[#DE7356]/12 rounded-[32px] flex items-center justify-center z-10 border-2 border-dashed border-[#DE7356]/70">
                   <div className="text-center">
                     <div className="text-3xl mb-3">📸</div>
                     <div className="text-lg font-semibold text-[#DE7356] mb-2">
@@ -1031,7 +1038,7 @@ export default function HomePage() {
                   <button
                     type="submit"
                     disabled={(!prompt.trim() && uploadedImages.length === 0) || isCreatingProject}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-white transition-opacity duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 hover:scale-110"
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#de7356] to-[#ff9f7a] text-white transition-transform duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 hover:scale-105 shadow-lg"
                   >
                     {isCreatingProject ? (
                       <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

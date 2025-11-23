@@ -38,14 +38,15 @@ export default function Header() {
                 </svg>
               </button>
             )}
-            <div className="h-8">
-              <Image
-                src="/Claudable_logo.svg"
+            <div className="h-10 px-3 py-2 rounded-xl bg-gradient-to-br from-[#fff6f2] via-white to-white border border-orange-100 shadow-sm">
+              {/* Use remote monmi logo with soft background so its white edges blend seamlessly */}
+              <img
+                src="https://monmi.au/assets/monmi-logo-qBVbzZlt.jpg"
                 alt="monmi"
-                width={120}
-                height={32}
-                className="h-8 w-auto"
-                priority
+                width={132}
+                height={36}
+                className="h-6 w-auto object-contain"
+                loading="lazy"
               />
             </div>
             <nav className="flex items-center gap-3" />

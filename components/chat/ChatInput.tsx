@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { SendHorizontal, MessageSquare, Image as ImageIcon, Wrench } from 'lucide-react';
+import { SendHorizontal, MessageSquare, Image as ImageIcon, Wrench, Brain } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -76,6 +76,7 @@ export default function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const submissionLockRef = useRef(false);
   const supportsImageUpload = preferredCli !== 'cursor' && preferredCli !== 'qwen' && preferredCli !== 'glm';
+  const deepThinkingSupported = preferredCli === 'claude' && (selectedModel?.includes('sonnet-4-5') ?? false);
 
   // Log CLI compatibility details
   console.log('🔧 CLI Compatibility Check:', {
@@ -178,6 +179,11 @@ export default function ChatInput({
 
     console.log('📸 Calling handleFiles with files');
     await handleFiles(files);
+  };
+
+  const toggleThinkingMode = () => {
+    if (!deepThinkingSupported || !onThinkingModeChange) return;
+    onThinkingModeChange(!thinkingMode);
   };
 
   const removeImage = (id: string) => {
@@ -497,34 +503,52 @@ export default function ChatInput({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center bg-gray-100 rounded-full p-0.5">
-            <button
-              type="button"
-              onClick={() => onModeChange?.('act')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
-                mode === 'act'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700 '
-              }`}
-              title="Act Mode: AI can modify code and create/delete files"
-            >
-              <Wrench className="h-3.5 w-3.5" />
-              <span>Act</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onModeChange?.('chat')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
-                mode === 'chat'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700 '
-              }`}
-              title="Chat Mode: AI provides answers without modifying code"
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-              <span>Chat</span>
-            </button>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-gray-100 rounded-full p-0.5">
+              <button
+                type="button"
+                onClick={() => onModeChange?.('act')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                  mode === 'act'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 '
+                }`}
+                title="Act Mode: AI can modify code and create/delete files"
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                <span>Act</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onModeChange?.('chat')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                  mode === 'chat'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 '
+                }`}
+                title="Chat Mode: AI provides answers without modifying code"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                <span>Chat</span>
+              </button>
+            </div>
+
+            {deepThinkingSupported && (
+              <button
+                type="button"
+                onClick={toggleThinkingMode}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+                  thinkingMode
+                    ? 'bg-black text-white border-black shadow-sm'
+                    : 'text-gray-700 border-gray-200 hover:bg-gray-100'
+                }`}
+                title="Enable Claude Sonnet deep thinking (longer reasoning before responding)"
+              >
+                <Brain className="h-3.5 w-3.5" />
+                <span>Deep thinking</span>
+              </button>
+            )}
           </div>
 
           <button

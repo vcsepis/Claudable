@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PreviewManager - Handles per-project development servers (live preview)
  */
 
@@ -190,31 +190,6 @@ async function collectEnvOverrides(projectPath: string): Promise<EnvOverrides> {
   }
 
   return overrides;
-}
-
-function resolvePublicBaseUrl(effectivePort: number): string | null {
-  const raw =
-    process.env.PREVIEW_PUBLIC_URL ||
-    process.env.RENDER_EXTERNAL_URL ||
-    process.env.NEXT_PUBLIC_APP_URL;
-
-  if (!raw) {
-    if (process.env.PORT && Number.isFinite(Number(process.env.PORT))) {
-      return `http://localhost:${process.env.PORT}`;
-    }
-    return null;
-  }
-
-  try {
-    const parsed = new URL(raw);
-    // If no explicit port, reuse effectivePort when the URL points to localhost
-    if (!parsed.port && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')) {
-      parsed.port = String(effectivePort);
-    }
-    return parsed.origin;
-  } catch {
-    return raw.replace(/\/+$/, '');
-  }
 }
 
 function resolvePreviewBounds(): { start: number; end: number } {
@@ -748,20 +723,18 @@ class PreviewManager {
     }
 
     const previewBounds = resolvePreviewBounds();
-    const envPortOverride = parsePort(
-      process.env.PREVIEW_PUBLIC_PORT ||
-      process.env.PREVIEW_HOST_PORT ||
-      process.env.PORT
-    );
-
     let preferredPort: number;
-    if (envPortOverride && envPortOverride > 0 && envPortOverride <= PREVIEW_MAX_PORT) {
-      preferredPort = envPortOverride;
-    } else {
-      preferredPort = await findAvailablePort(
-        previewBounds.start,
-        previewBounds.end
+    try {
+      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end);
+    } catch (error) {
+      // If the requested range is exhausted (e.g., single port already in use), fall back to default preview range
+      const fallbackStart = PREVIEW_FALLBACK_PORT_START;
+      const fallbackEnd = PREVIEW_FALLBACK_PORT_END;
+      console.warn(
+        `[PreviewManager] Port allocation failed for range ${previewBounds.start}-${previewBounds.end}. Falling back to ${fallbackStart}-${fallbackEnd}.`,
+        error
       );
+      preferredPort = await findAvailablePort(fallbackStart, fallbackEnd);
     }
 
     const initialUrl = `http://localhost:${preferredPort}`;
@@ -879,8 +852,7 @@ class PreviewManager {
     }
 
     const effectivePort = previewProcess.port;
-    const publicBase = resolvePublicBaseUrl(effectivePort);
-    let resolvedUrl: string = publicBase ?? `http://localhost:${effectivePort}`;
+    let resolvedUrl: string = `http://localhost:${effectivePort}`;
     if (typeof overrides.url === 'string' && overrides.url.trim().length > 0) {
       resolvedUrl = overrides.url.trim();
     }
@@ -888,22 +860,16 @@ class PreviewManager {
     env.NEXT_PUBLIC_APP_URL = resolvedUrl;
     previewProcess.url = resolvedUrl;
 
-    // Prefer Turbopack by default for faster dev boot (can disable with PREVIEW_USE_TURBO=0)
-    const useTurbo = process.env.PREVIEW_USE_TURBO !== '0';
-    const devArgs = useTurbo
-      ? ['run', 'dev', '--', '--turbo', '--port', String(effectivePort)]
-      : ['run', 'dev', '--', '--port', String(effectivePort)];
-
-    const child = spawn(npmCommand, devArgs, {
-      cwd: projectPath,
-      env: {
-        ...env,
-        NEXT_TELEMETRY_DISABLED: '1',
-        BROWSERSLIST_IGNORE_OLD_DATA: '1',
-      },
-      shell: process.platform === 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const child = spawn(
+      npmCommand,
+      ['run', 'dev', '--', '--port', String(effectivePort)],
+      {
+        cwd: projectPath,
+        env,
+        shell: process.platform === 'win32',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
 
     previewProcess.process = child;
     this.processes.set(projectId, previewProcess);
@@ -945,16 +911,14 @@ class PreviewManager {
       log(Buffer.from(`Preview process failed: ${error.message}`));
     });
 
-    // Immediately mark running so UI can proceed without waiting for warmup
+    await waitForPreviewReady(previewProcess.url, log).catch(() => {
+      // wait function already logged; ignore errors
+    });
+
     await updateProject(projectId, {
       previewUrl: previewProcess.url,
       previewPort: previewProcess.port,
       status: 'running',
-    });
-
-    // Warmup check in background (non-blocking)
-    void waitForPreviewReady(previewProcess.url, log).catch(() => {
-      // wait function already logged; ignore errors
     });
 
     return this.toInfo(previewProcess);

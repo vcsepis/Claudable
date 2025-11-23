@@ -60,6 +60,7 @@ export interface ChatActRequest {
   isInitialPrompt?: boolean;
   selectedModel?: string;
   requestId?: string;
+  deepThinking?: boolean;
 }
 
 export interface CreateMessageInput {

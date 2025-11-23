@@ -1919,10 +1919,12 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(new Error('timeout')), 12000);
+        // Allow a bit more time for slower dev DBs and large histories
+        const timeoutMs = 25000;
+        const timeoutId = setTimeout(() => controller.abort(new Error('timeout')), timeoutMs);
 
         // Load more messages per request to reduce pagination needs
-        const response = await fetch(`${API_BASE}/api/chat/${projectId}/messages?limit=200&offset=0`, {
+        const response = await fetch(`${API_BASE}/api/chat/${projectId}/messages?limit=100&offset=0`, {
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
@@ -1976,10 +1978,38 @@ export default function ChatLog({ projectId, onSessionStatusChange, onProjectSta
         }
       } catch (error) {
         const isAbort = (error as any)?.name === 'AbortError' || (error as any)?.message === 'timeout';
-        const message = isAbort ? 'Chat history request timed out. Please retry.' : 'Failed to load chat history. Please retry.';
-        setHistoryError(message);
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('Failed to load chat history (network issue):', error);
+        if (isAbort && !hasLoadedInitialDataRef.current) {
+          // Retry once immediately if the first attempt timed out (e.g., cold start)
+          try {
+            const retryResponse = await fetch(`${API_BASE}/api/chat/${projectId}/messages?limit=100&offset=0`);
+            if (retryResponse.ok) {
+              didSucceed = true;
+              const payload = await retryResponse.json();
+              const chatMessages = Array.isArray(payload)
+                ? payload
+                : payload?.data ?? payload?.messages ?? [];
+              const normalized = Array.isArray(chatMessages)
+                ? expandMessagesList(chatMessages.map(toChatMessage), ensureStableMessageId)
+                : [];
+              setMessages((prev) => integrateMessages(prev, normalized));
+              setHistoryError(null);
+            } else {
+              const retryErrorText = await retryResponse.text().catch(() => '');
+              setHistoryError(`Failed to load chat history (${retryResponse.status}). ${retryErrorText || ''}`.trim());
+            }
+          } catch (retryError) {
+            const message = 'Chat history request timed out. Please retry.';
+            setHistoryError(message);
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Failed to load chat history on retry (network issue):', retryError);
+            }
+          }
+        } else {
+          const message = isAbort ? 'Chat history request timed out. Please retry.' : 'Failed to load chat history. Please retry.';
+          setHistoryError(message);
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Failed to load chat history (network issue):', error);
+          }
         }
       } finally {
         isLoadingHistoryRef.current = false;

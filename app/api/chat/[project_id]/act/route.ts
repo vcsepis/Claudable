@@ -39,6 +39,16 @@ function coerceString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function coerceBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'on', 'enabled'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'off', 'disabled'].includes(normalized)) return false;
+  }
+  return null;
+}
+
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
   ? PROJECTS_DIR
@@ -289,6 +299,19 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       getDefaultModelForCli(cliPreference);
     const selectedModel = normalizeModelId(cliPreference, selectedModelRaw);
 
+    const deepThinkingRaw =
+      coerceBoolean(body.deepThinking) ??
+      coerceBoolean(legacyBody['deepThinking']) ??
+      coerceBoolean(legacyBody['deep_thinking']) ??
+      coerceBoolean(legacyBody['thinkingMode']) ??
+      coerceBoolean(legacyBody['thinking_mode']);
+
+    const enableDeepThinking =
+      cliPreference === 'claude' &&
+      typeof selectedModel === 'string' &&
+      selectedModel.includes('sonnet-4-5') &&
+      deepThinkingRaw === true;
+
     const conversationId =
       coerceString(body.conversationId) ?? coerceString(legacyBody['conversation_id']);
 
@@ -398,55 +421,77 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
 
     if (isInitialPrompt) {
-      const executor =
-        cliPreference === 'codex'
-          ? initializeCodexProject
-          : cliPreference === 'cursor'
-          ? initializeCursorProject
-          : cliPreference === 'qwen'
-          ? initializeQwenProject
-          : cliPreference === 'glm'
-          ? initializeGLMProject
-          : initializeClaudeProject;
+      if (cliPreference === 'claude') {
+        initializeClaudeProject(
+          project_id,
+          projectPath,
+          finalInstruction,
+          selectedModel,
+          requestId,
+          enableDeepThinking,
+        ).catch((error) => {
+          console.error('[API] Failed to initialize project:', error);
+        });
+      } else {
+        const executor =
+          cliPreference === 'codex'
+            ? initializeCodexProject
+            : cliPreference === 'cursor'
+            ? initializeCursorProject
+            : cliPreference === 'qwen'
+            ? initializeQwenProject
+            : initializeGLMProject;
 
-      executor(
-        project_id,
-        projectPath,
-        finalInstruction,
-        selectedModel,
-        requestId,
-      ).catch((error) => {
-        console.error('[API] Failed to initialize project:', error);
-      });
+        executor(
+          project_id,
+          projectPath,
+          finalInstruction,
+          selectedModel,
+          requestId,
+        ).catch((error) => {
+          console.error('[API] Failed to initialize project:', error);
+        });
+      }
     } else {
-      const executor =
-        cliPreference === 'codex'
-          ? applyCodexChanges
-          : cliPreference === 'cursor'
-          ? applyCursorChanges
-          : cliPreference === 'qwen'
-          ? applyQwenChanges
-          : cliPreference === 'glm'
-          ? applyGLMChanges
-          : applyClaudeChanges;
+      if (cliPreference === 'claude') {
+        const sessionId = project.activeClaudeSessionId || undefined;
+        applyClaudeChanges(
+          project_id,
+          projectPath,
+          finalInstruction,
+          selectedModel,
+          sessionId,
+          requestId,
+          enableDeepThinking,
+        ).catch((error) => {
+          console.error('[API] Failed to execute AI:', error);
+        });
+      } else {
+        const executor =
+          cliPreference === 'codex'
+            ? applyCodexChanges
+            : cliPreference === 'cursor'
+            ? applyCursorChanges
+            : cliPreference === 'qwen'
+            ? applyQwenChanges
+            : applyGLMChanges;
 
-      const sessionId =
-        cliPreference === 'claude'
-          ? project.activeClaudeSessionId || undefined
-          : cliPreference === 'cursor'
-          ? project.activeCursorSessionId || undefined
-          : undefined;
+        const sessionId =
+          cliPreference === 'cursor'
+            ? project.activeCursorSessionId || undefined
+            : undefined;
 
-      executor(
-        project_id,
-        projectPath,
-        finalInstruction,
-        selectedModel,
-        sessionId,
-        requestId,
-      ).catch((error) => {
-        console.error('[API] Failed to execute AI:', error);
-      });
+        executor(
+          project_id,
+          projectPath,
+          finalInstruction,
+          selectedModel,
+          sessionId,
+          requestId,
+        ).catch((error) => {
+          console.error('[API] Failed to execute AI:', error);
+        });
+      }
     }
 
     return NextResponse.json({

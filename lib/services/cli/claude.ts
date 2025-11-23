@@ -590,7 +590,8 @@ export async function executeClaude(
   instruction: string,
   model: string = CLAUDE_DEFAULT_MODEL,
   sessionId?: string,
-  requestId?: string
+  requestId?: string,
+  options: { enableDeepThinking?: boolean } = {}
 ): Promise<void> {
   console.log(`\n========================================`);
   console.log(`[ClaudeService] 🚀 Starting Claude Agent SDK`);
@@ -621,6 +622,18 @@ export async function executeClaude(
   const maxOutputTokens = Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
     ? configuredMaxTokens
     : 4000;
+
+  // Deep thinking support (Claude Sonnet 4.5) - gives the model a longer reasoning budget
+  const deepThinkingRequested = options.enableDeepThinking === true;
+  const supportsDeepThinking = resolvedModel.includes('sonnet-4-5');
+  const enableDeepThinking = deepThinkingRequested && supportsDeepThinking;
+  const configuredThinkingTokens = Number(process.env.CLAUDE_CODE_MAX_THINKING_TOKENS);
+  const maxThinkingTokens =
+    enableDeepThinking && Number.isFinite(configuredThinkingTokens) && configuredThinkingTokens > 0
+      ? configuredThinkingTokens
+      : enableDeepThinking
+      ? 4096
+      : undefined;
 
   let hasMarkedTerminalStatus = false;
   let emittedCompletedStatus = false;
@@ -753,6 +766,11 @@ export async function executeClaude(
     // Start Claude Agent SDK query
     console.log(`[ClaudeService] 🤖 Querying Claude Agent SDK...`);
     console.log(`[ClaudeService] 📁 Working Directory: ${absoluteProjectPath}`);
+    if (enableDeepThinking) {
+      console.log(
+        `[ClaudeService] 🧠 Deep thinking enabled (max thinking tokens: ${maxThinkingTokens ?? 'default'})`
+      );
+    }
     const response = query({
       prompt: instruction,
       options: {
@@ -774,6 +792,7 @@ export async function executeClaude(
 - When sharing a preview link, read the actual NEXT_PUBLIC_APP_URL (e.g. from .env/.env.local or project metadata) instead of assuming a default port.
 - Prefer giving the user the live preview link that is actually running rather than written instructions.`,
         maxOutputTokens,
+        ...(maxThinkingTokens !== undefined ? { maxThinkingTokens } : {}),
         // Capture SDK stderr so we can surface real errors instead of just exit code
         stderr: (data: string) => {
           const line = String(data).trimEnd();
@@ -1197,7 +1216,8 @@ export async function initializeNextJsProject(
   projectPath: string,
   initialPrompt: string,
   model: string = CLAUDE_DEFAULT_MODEL,
-  requestId?: string
+  requestId?: string,
+  enableDeepThinking = false
 ): Promise<void> {
   console.log(`[ClaudeService] Initializing Next.js project: ${projectId}`);
 
@@ -1210,7 +1230,9 @@ Use App Router, TypeScript, and Tailwind CSS.
 Set up the basic project structure and implement the requested features.
 `.trim();
 
-  await executeClaude(projectId, projectPath, fullPrompt, model, undefined, requestId);
+  await executeClaude(projectId, projectPath, fullPrompt, model, undefined, requestId, {
+    enableDeepThinking,
+  });
 }
 
 /**
@@ -1229,8 +1251,11 @@ export async function applyChanges(
   instruction: string,
   model: string = CLAUDE_DEFAULT_MODEL,
   sessionId?: string,
-  requestId?: string
+  requestId?: string,
+  enableDeepThinking = false
 ): Promise<void> {
   console.log(`[ClaudeService] Applying changes to project: ${projectId}`);
-  await executeClaude(projectId, projectPath, instruction, model, sessionId, requestId);
+  await executeClaude(projectId, projectPath, instruction, model, sessionId, requestId, {
+    enableDeepThinking,
+  });
 }
