@@ -192,6 +192,26 @@ async function collectEnvOverrides(projectPath: string): Promise<EnvOverrides> {
   return overrides;
 }
 
+function resolveExposedPreviewUrl(localUrl: string, port: number): string {
+  const raw = process.env.PREVIEW_PUBLIC_URL;
+  if (!raw) {
+    return localUrl;
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return localUrl;
+  }
+
+  const substituted = trimmed
+    .replace(/\{port\}/gi, String(port))
+    .replace(/\$\{PORT\}/g, String(port))
+    .replace(/\$PORT\b/gi, String(port));
+
+  const normalized = substituted.replace(/\/+$/, '');
+  return normalized || localUrl;
+}
+
 function resolvePreviewBounds(): { start: number; end: number } {
   const envStartRaw = Number.parseInt(process.env.PREVIEW_PORT_START || '', 10);
   const envEndRaw = Number.parseInt(process.env.PREVIEW_PORT_END || '', 10);
@@ -915,13 +935,15 @@ class PreviewManager {
       // wait function already logged; ignore errors
     });
 
+    const info = this.toInfo(previewProcess);
+
     await updateProject(projectId, {
-      previewUrl: previewProcess.url,
-      previewPort: previewProcess.port,
+      previewUrl: info.url,
+      previewPort: info.port,
       status: 'running',
     });
 
-    return this.toInfo(previewProcess);
+    return info;
   }
 
   public async stop(projectId: string): Promise<PreviewInfo> {
@@ -983,9 +1005,14 @@ class PreviewManager {
   }
 
   private toInfo(processInfo: PreviewProcess): PreviewInfo {
+    const exposedUrl = resolveExposedPreviewUrl(
+      processInfo.url,
+      processInfo.port
+    );
+
     return {
       port: processInfo.port,
-      url: processInfo.url,
+      url: exposedUrl,
       status: processInfo.status,
       logs: [...processInfo.logs],
       pid: processInfo.process?.pid,
