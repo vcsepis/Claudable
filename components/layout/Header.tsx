@@ -40,6 +40,7 @@ export default function Header() {
             )}
             <div className="h-10 px-3 py-2 rounded-xl bg-gradient-to-br from-[#fff6f2] via-white to-white border border-orange-100 shadow-sm">
               {/* Use remote monmi logo with soft background so its white edges blend seamlessly */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="https://monmi.au/assets/monmi-logo-qBVbzZlt.jpg"
                 alt="monmi"

@@ -637,6 +637,15 @@ const persistProjectPreferences = useCallback(
     }
   }, [modelOptions, preferredCli, selectedModel, handleModelChange]);
 
+  const resolveApiBase = useCallback(() => {
+    const envBase = API_BASE?.trim();
+    if (envBase) return envBase.replace(/\/+$/, '');
+    if (typeof window !== 'undefined') {
+      return window.location.origin;
+    }
+    return '';
+  }, []);
+
   const loadDeployStatus = useCallback(async () => {
     try {
       // Use the same API as ServiceSettings to check actual project service connections
@@ -688,7 +697,7 @@ const persistProjectPreferences = useCallback(
       setPublishedUrl(null);
       setDeploymentStatus('idle');
     }
-  }, [projectId, resolveApiBase]);
+  }, [projectId]);
 
   const startDeploymentPolling = useCallback((depId: string) => {
     if (deployPollRef.current) clearInterval(deployPollRef.current);
@@ -791,7 +800,7 @@ const persistProjectPreferences = useCallback(
         console.error('🔍 Polling error:', error);
       }
     }, 1000); // Changed to 1 second interval
-  }, [projectId]);
+  }, [projectId, resolveApiBase]);
 
   const checkCurrentDeployment = useCallback(async () => {
     try {
@@ -890,15 +899,6 @@ const persistProjectPreferences = useCallback(
       console.error('Error stopping preview:', error);
     }
   }, [projectId]);
-
-  const resolveApiBase = useCallback(() => {
-    const envBase = API_BASE?.trim();
-    if (envBase) return envBase.replace(/\/+$/, '');
-    if (typeof window !== 'undefined') {
-      return window.location.origin;
-    }
-    return '';
-  }, []);
 
   const fetchWithRetry = useCallback(
     async (url: string, init?: RequestInit, retries = 3, backoffMs = 300) => {
@@ -2890,6 +2890,7 @@ const persistProjectPreferences = useCallback(
                       >
                         {/* Claudable Symbol with loading spinner */}
                         <div className="w-40 h-40 mx-auto mb-6 relative rounded-2xl bg-gradient-to-br from-[#fff5f0] via-white to-[#ffe9e0] shadow-lg flex items-center justify-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={MONMI_LOGO_URL}
                             alt="monmi"
@@ -2957,6 +2958,7 @@ const persistProjectPreferences = useCallback(
                                 style={{ transformOrigin: "center center" }}
                               >
                                 <div className="w-full h-full rounded-2xl bg-gradient-to-br from-[#fff5f0] via-white to-[#ffe9e0] shadow-lg flex items-center justify-center">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img
                                     src={MONMI_LOGO_URL}
                                     alt="monmi"
@@ -3011,6 +3013,7 @@ const persistProjectPreferences = useCallback(
                                 transition={{ duration: 6, repeat: isStartingPreview ? Infinity : 0, ease: "linear" }}
                               >
                                 <div className="w-full h-full rounded-2xl bg-gradient-to-br from-[#fff5f0] via-white to-[#ffe9e0] shadow-lg flex items-center justify-center">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img
                                     src={MONMI_LOGO_URL}
                                     alt="monmi"

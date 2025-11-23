@@ -956,6 +956,7 @@ export default function HomePage() {
             <div className="text-center mb-12">
               <div className="flex justify-center mb-6">
                 <div className="px-7 py-6 rounded-3xl shadow-md bg-gradient-to-br from-[#fff0c2] via-white to-[#ffe8a6] border border-[#ffd980]/80">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={MONMI_LOGO_URL}
                     alt="monmi"
