@@ -39,6 +39,7 @@ export interface ServiceConnection {
 export interface BaseProject {
   id: string;
   name: string;
+  userId: string;
   description?: string | null;
   status: ProjectStatus;
   previewUrl?: string | null;

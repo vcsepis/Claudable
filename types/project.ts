@@ -21,6 +21,7 @@ export interface ServiceConnection {
 export interface Project {
   id: string;
   name: string;
+  userId: string;
   description?: string | null;
   status?: ProjectStatus;
   previewUrl?: string | null;

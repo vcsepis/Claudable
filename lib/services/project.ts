@@ -14,10 +14,12 @@ const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
   : path.resolve(process.cwd(), PROJECTS_DIR);
 
 /**
- * Retrieve all projects
+ * Retrieve all projects (optionally scoped to a user)
  */
-export async function getAllProjects(): Promise<Project[]> {
+export async function getAllProjects(userId?: string): Promise<Project[]> {
+  const where = userId ? { userId } : undefined;
   const projects = await prisma.project.findMany({
+    where,
     orderBy: {
       lastActiveAt: 'desc',
     },
@@ -26,6 +28,13 @@ export async function getAllProjects(): Promise<Project[]> {
     ...project,
     selectedModel: normalizeModelId(project.preferredCli ?? 'claude', project.selectedModel ?? undefined),
   })) as Project[];
+}
+
+/**
+ * Count projects belonging to a user
+ */
+export async function countProjectsByUser(userId: string): Promise<number> {
+  return prisma.project.count({ where: { userId } });
 }
 
 /**
@@ -60,6 +69,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
         data: {
           id: currentId,
           name: input.name,
+          userId: input.userId || 'anonymous',
           description: input.description,
           initialPrompt: input.initialPrompt,
           repoPath: projectPath,

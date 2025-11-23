@@ -113,9 +113,10 @@ interface CreateProjectModalProps {
   onClose: () => void;
   onCreated: () => void;
   onOpenGlobalSettings?: () => void;
+  userId?: string;
 }
 
-export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlobalSettings }: CreateProjectModalProps) {
+export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlobalSettings, userId }: CreateProjectModalProps) {
   const [projectName, setProjectName] = useState('');
   const [prompt, setPrompt] = useState('');
   const [selectedCLI, setSelectedCLI] = useState<string>('claude');
@@ -409,6 +410,13 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
     
     const name = projectName.trim() || 'New Project';
     const projectUuid = generateUUID();
+
+    if (!userId) {
+      setShowInitialization(false);
+      setInitializingProjectId(null);
+      alert('Please sign in before creating a project.');
+      return;
+    }
     
     // 1. Show loading spinner immediately
     setLoading(false); // Turn off button loading
@@ -423,6 +431,7 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
       const projectData: any = {
         project_id: projectUuid,
         name,
+        userId,
         description: prompt,
         initialPrompt: prompt,
         preferredCli: finalCLI,

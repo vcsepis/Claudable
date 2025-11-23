@@ -12,6 +12,7 @@ import { ProjectSettings } from '@/components/settings/ProjectSettings';
 import ChatInput from '@/components/chat/ChatInput';
 import { ChatErrorBoundary } from '@/components/ErrorBoundary';
 import { useUserRequests } from '@/hooks/useUserRequests';
+import { useSupabaseUser } from '@/hooks/useSupabaseUser';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
 import {
@@ -203,6 +204,7 @@ export default function ChatPage() {
     startRequest,
     completeRequest
   } = useUserRequests({ projectId });
+  const { user, loading: userLoading } = useSupabaseUser();
   
   const [projectName, setProjectName] = useState<string>('');
   const [projectDescription, setProjectDescription] = useState<string>('');
@@ -1779,6 +1781,15 @@ const persistProjectPreferences = useCallback(
     const autoDeepThinking = isDeepThinkingSupported && shouldAutoEnableDeepThinking(finalMessage, imagesToUse.length);
     const deepThinkingEnabled = isDeepThinkingSupported && (thinkingMode || autoDeepThinking);
 
+    if (userLoading) {
+      return;
+    }
+    if (!user) {
+      alert('Please sign in to chat with your project.');
+      router.push('/auth');
+      return;
+    }
+
     if (!finalMessage.trim() && imagesToUse.length === 0) {
       alert('Please enter a task description or upload an image.');
       return;
@@ -2411,13 +2422,33 @@ const persistProjectPreferences = useCallback(
             
             {/* Simple input area */}
             <div className="p-4 rounded-bl-2xl">
+              {!user && !userLoading && (
+                <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">Please sign in to chat</p>
+                    <p className="text-xs text-amber-700/80">Login or create an account to send prompts and run preview.</p>
+                  </div>
+                  <button
+                    className="rounded-lg bg-emerald-500 text-white px-3 py-2 text-xs font-semibold hover:bg-emerald-600"
+                    onClick={() => router.push('/auth')}
+                  >
+                    Go to login
+                  </button>
+                </div>
+              )}
               <ChatInput
                 onSendMessage={(message, images) => {
                   // Pass images to runAct
                   runAct(message, images);
                 }}
-                disabled={isRunning}
-                placeholder={mode === 'act' ? "Ask monmi..." : "Chat with monmi..."}
+                disabled={isRunning || userLoading || !user}
+                placeholder={
+                  user
+                    ? mode === 'act'
+                      ? "Ask monmi..."
+                      : "Chat with monmi..."
+                    : 'Please sign in to start chatting'
+                }
                 mode={mode}
                 onModeChange={setMode}
                 projectId={projectId}

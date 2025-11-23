@@ -12,6 +12,7 @@ import { Image as ImageIcon } from 'lucide-react';
 import type { Project as ProjectSummary } from '@/types/project';
 import { fetchCliStatusSnapshot, createCliStatusFallback } from '@/hooks/useCLI';
 import type { CLIStatus } from '@/types/cli';
+import { useSupabaseUser } from '@/hooks/useSupabaseUser';
 import {
   ACTIVE_CLI_BRAND_COLORS,
   ACTIVE_CLI_MODEL_OPTIONS,
@@ -43,6 +44,7 @@ const MODEL_OPTIONS_BY_ASSISTANT = ACTIVE_CLI_MODEL_OPTIONS;
 
 export default function HomePage() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [projectTotal, setProjectTotal] = useState<number>(0);
   const [showCreate, setShowCreate] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [globalSettingsTab, setGlobalSettingsTab] = useState<'general' | 'ai-assistant'>('ai-assistant');
@@ -69,6 +71,7 @@ export default function HomePage() {
     return {
       id: project.id,
       name: project.name,
+      userId: project.userId ?? project.user_id ?? '',
       description: project.description ?? null,
       status: project.status,
       previewUrl: project.previewUrl ?? project.preview_url ?? null,
@@ -89,6 +92,7 @@ export default function HomePage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cliStatus, setCLIStatus] = useState<CLIStatus>({});
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const selectedAssistantOption = ACTIVE_CLI_OPTIONS_MAP[selectedAssistant];
   
   // Get available models based on current assistant
@@ -96,6 +100,7 @@ export default function HomePage() {
   
   // Sync with Global Settings (until user overrides locally)
   const { settings: globalSettings } = useGlobalSettings();
+  const { user, loading: userLoading, error: userError } = useSupabaseUser();
   
   // Check if this is a fresh page load (not navigation)
   useEffect(() => {
@@ -271,11 +276,20 @@ export default function HomePage() {
   };
 
   const load = useCallback(async () => {
+    if (!user?.id) {
+      if (!userLoading) {
+        setProjects([]);
+        setProjectTotal(0);
+      }
+      return;
+    }
+
     try {
-      const r = await fetchAPI(`${API_BASE}/api/projects`);
+      const r = await fetchAPI(`${API_BASE}/api/projects?user_id=${encodeURIComponent(user.id)}`);
       if (!r.ok) {
         console.warn('Failed to load projects: HTTP', r.status);
         setProjects([]);
+        setProjectTotal(0);
         return;
       }
 
@@ -283,16 +297,20 @@ export default function HomePage() {
       if (payload?.success === false) {
         console.error('Failed to load projects:', payload?.error || payload?.message);
         setProjects([]);
+        setProjectTotal(0);
         return;
       }
 
-      const items: unknown[] = Array.isArray(payload?.data)
-        ? payload.data
-        : Array.isArray(payload)
-        ? payload
-        : [];
+      const rawItems =
+        Array.isArray(payload?.data) && payload.data.length && !payload?.data?.items
+          ? payload.data
+          : Array.isArray(payload?.data?.items)
+          ? payload.data.items
+          : Array.isArray(payload)
+          ? payload
+          : [];
 
-      const normalized: ProjectSummary[] = items
+      const normalized: ProjectSummary[] = rawItems
         .filter((project): project is Record<string, unknown> => Boolean(project && typeof project === 'object'))
         .map((project) => normalizeProjectPayload(project));
 
@@ -305,11 +323,14 @@ export default function HomePage() {
       });
 
       setProjects(sortedProjects);
+      const totalFromPayload = typeof payload?.data?.total === 'number' ? payload.data.total : sortedProjects.length;
+      setProjectTotal(totalFromPayload);
     } catch (error) {
       console.warn('Failed to load projects:', error);
       setProjects([]);
+      setProjectTotal(0);
     }
-  }, [normalizeProjectPayload]);
+  }, [normalizeProjectPayload, user?.id, userLoading]);
   
   async function onCreated() { await load(); }
   
@@ -473,6 +494,12 @@ export default function HomePage() {
 
   const handleSubmit = async () => {
     if ((!prompt.trim() && uploadedImages.length === 0) || isCreatingProject) return;
+
+    if (userLoading) return;
+    if (!user) {
+      setShowLoginPrompt(true);
+      return;
+    }
     
     setIsCreatingProject(true);
     showToast('Creating project...', 'success');
@@ -487,6 +514,7 @@ export default function HomePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: projectId,
+          userId: user.id,
           name: prompt.slice(0, 50) + (prompt.length > 50 ? '...' : ''),
           initialPrompt: prompt.trim(),
           preferredCli: selectedAssistant,
@@ -603,7 +631,9 @@ export default function HomePage() {
   };
 
   useEffect(() => { 
-    load();
+    if (!userLoading) {
+      load();
+    }
     
     // Handle clipboard paste for images
     const handlePaste = (e: ClipboardEvent) => {
@@ -738,8 +768,11 @@ export default function HomePage() {
           {/* History header with close button */}
           <div className="p-3 border-b border-gray-200 ">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 px-2 py-1">
+            <div className="flex items-center gap-2 px-2 py-1">
                 <h2 className="text-gray-900 font-medium text-lg">History</h2>
+                <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200">
+                  {projectTotal}
+                </span>
               </div>
               <button
                 onClick={() => setSidebarOpen(false)}
@@ -1098,6 +1131,44 @@ export default function HomePage() {
         isOpen={showGlobalSettings}
         onClose={() => setShowGlobalSettings(false)}
       />
+
+      {/* Login required modal */}
+      {showLoginPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                !
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Sign in to continue</h3>
+                <p className="text-sm text-gray-600">
+                  Please log in or create an account to start a project and chat with monmi.
+                </p>
+                {userError && (
+                  <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">
+                    {userError}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowLoginPrompt(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <a
+                href="/auth"
+                className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+              >
+                Login / Sign up
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Project Modal */}
       {deleteModal.isOpen && deleteModal.project && (

@@ -30,6 +30,7 @@ model Project {
   // Initial setup
   initialPrompt String? @map("initial_prompt")
   templateType  String? @map("template_type") // nextjs, react, vue, etc.
+  userId        String  @default("anonymous") @map("user_id")
 
   // AI Session Management
   activeClaudeSessionId String? @map("active_claude_session_id")
@@ -58,6 +59,7 @@ model Project {
   userRequests          UserRequest[]
 
   @@map("projects")
+  @@index([userId])
 }
 
 model Message {

@@ -5,6 +5,7 @@ export function serializeProject(project: ProjectEntity): Project {
   return {
     id: project.id,
     name: project.name,
+    userId: project.userId,
     description: project.description ?? null,
     status: project.status,
     previewUrl: project.previewUrl ?? null,

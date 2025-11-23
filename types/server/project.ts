@@ -8,6 +8,7 @@ import type { BaseProject, TemplateType } from '../shared/project';
  * Server Project (with database fields)
  */
 export interface ServerProject extends BaseProject {
+  userId: string;
   repoPath?: string | null;
   templateType?: TemplateType;
   activeClaudeSessionId?: string | null;
@@ -25,6 +26,7 @@ export interface CreateProjectInput {
   project_id: string;
   name: string;
   initialPrompt: string;
+  userId: string;
   preferredCli?: string;
   selectedModel?: string;
   description?: string;
@@ -45,4 +47,5 @@ export interface UpdateProjectInput {
   activeClaudeSessionId?: string;
   activeCursorSessionId?: string;
   repoPath?: string | null;
+  userId?: string;
 }

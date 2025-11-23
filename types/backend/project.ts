@@ -9,6 +9,7 @@ export type TemplateType = 'nextjs' | 'react' | 'vue' | 'custom';
 export interface Project {
   id: string;
   name: string;
+  userId: string;
   description?: string;
   status: ProjectStatus;
   /**
@@ -34,6 +35,7 @@ export interface CreateProjectInput {
   project_id: string;
   name: string;
   initialPrompt: string;
+  userId: string;
   preferredCli?: string;
   selectedModel?: string;
   description?: string;
@@ -54,6 +56,7 @@ export interface UpdateProjectInput {
   activeClaudeSessionId?: string;
   activeCursorSessionId?: string;
   repoPath?: string | null;
+  userId?: string;
 }
 
 export interface ProjectSettings {
