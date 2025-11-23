@@ -439,7 +439,7 @@ export default function ChatPage() {
     } finally {
       setIsRunning(false);
     }
-  }, [initialPromptSent, preferredCli, conversationId, projectId, selectedModel, createRequest]);
+  }, [initialPromptSent, preferredCli, conversationId, projectId, selectedModel, createRequest, isDeepThinkingSupported, shouldAutoEnableDeepThinking, thinkingMode]);
 
   // Guarded trigger that can be called from multiple places safely
   const triggerInitialPromptIfNeeded = useCallback(() => {
@@ -688,7 +688,7 @@ const persistProjectPreferences = useCallback(
       setPublishedUrl(null);
       setDeploymentStatus('idle');
     }
-  }, [projectId]);
+  }, [projectId, resolveApiBase]);
 
   const startDeploymentPolling = useCallback((depId: string) => {
     if (deployPollRef.current) clearInterval(deployPollRef.current);
@@ -1104,7 +1104,7 @@ const persistProjectPreferences = useCallback(
       setHasUnsavedChanges(false);
       setSelectedFile(path);
     }
-  }, [projectId, hasUnsavedChanges, selectedFile]);
+  }, [projectId, hasUnsavedChanges, selectedFile, resolveApiBase, fetchWithRetry]);
 
   // Reload currently selected file
   const reloadCurrentFile = useCallback(async () => {
@@ -1130,7 +1130,7 @@ const persistProjectPreferences = useCallback(
         // Silently fail - this is a background refresh
       }
     }
-  }, [projectId, selectedFile, showPreview, hasUnsavedChanges, content]);
+  }, [projectId, selectedFile, showPreview, hasUnsavedChanges, content, resolveApiBase, fetchWithRetry]);
 
   // Lazy load highlight.js only when needed
   const [hljs, setHljs] = useState<any>(null);
@@ -1245,7 +1245,7 @@ const persistProjectPreferences = useCallback(
     } finally {
       setIsSavingFile(false);
     }
-  }, [selectedFile, isSavingFile, hasUnsavedChanges, projectId, refreshPreview]);
+  }, [selectedFile, isSavingFile, hasUnsavedChanges, projectId, refreshPreview, resolveApiBase, fetchWithRetry]);
 
   const handleEditorKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {

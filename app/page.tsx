@@ -301,7 +301,7 @@ export default function HomePage() {
         return;
       }
 
-      const rawItems =
+      const rawItems: unknown[] =
         Array.isArray(payload?.data) && payload.data.length && !payload?.data?.items
           ? payload.data
           : Array.isArray(payload?.data?.items)
@@ -311,7 +311,7 @@ export default function HomePage() {
           : [];
 
       const normalized: ProjectSummary[] = rawItems
-        .filter((project): project is Record<string, unknown> => Boolean(project && typeof project === 'object'))
+        .filter((project: unknown): project is Record<string, unknown> => Boolean(project && typeof project === 'object'))
         .map((project) => normalizeProjectPayload(project));
 
       const sortedProjects = normalized.sort((a, b) => {
@@ -682,7 +682,7 @@ export default function HomePage() {
       timers.clear();
       document.removeEventListener('paste', handlePaste);
     };
-  }, [selectedAssistant, handleFiles, load]);
+  }, [selectedAssistant, handleFiles, load, userLoading]);
 
   // Update models when assistant changes
   const handleAssistantChange = (assistant: string) => {
