@@ -1,12 +1,18 @@
 "use client";
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ProjectSettings from '@/components/settings/ProjectSettings';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 
 export default function Header() {
+  const [mounted, setMounted] = useState(false);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
   const pathname = usePathname() ?? '';
+
+  // Avoid SSR/CSR pathname mismatch by rendering only after mount
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Extract project ID from pathname if we're in a project page
   const projectId = pathname.match(/^\/([^\/]+)\/(chat|page)?$/)?.[1];
@@ -15,7 +21,7 @@ export default function Header() {
   const isChatPage = pathname.includes('/chat');
   const isMainPage = pathname === '/';
 
-  if (isChatPage || isMainPage) {
+  if (!mounted || isChatPage || isMainPage) {
     return null;
   }
 

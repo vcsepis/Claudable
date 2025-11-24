@@ -10,6 +10,7 @@ export function serializeProject(project: ProjectEntity): Project {
     status: project.status,
     previewUrl: project.previewUrl ?? null,
     previewPort: project.previewPort ?? null,
+    creditBalance: project.creditBalance ?? 0,
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
     lastActiveAt: project.lastActiveAt ? project.lastActiveAt.toISOString() : null,

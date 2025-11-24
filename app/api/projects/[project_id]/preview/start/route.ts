@@ -5,6 +5,9 @@
 
 import { NextResponse } from 'next/server';
 import { previewManager } from '@/lib/services/preview';
+import { getProjectById } from '@/lib/services/project';
+import { costForCategory } from '@/lib/services/credits';
+import { deductUserCredits } from '@/lib/services/credits';
 
 interface RouteContext {
   params: Promise<{ project_id: string }>;
@@ -16,6 +19,31 @@ export async function POST(
 ) {
   try {
     const { project_id } = await params;
+    const project = await getProjectById(project_id);
+    if (!project) {
+      return NextResponse.json(
+        { success: false, error: 'Project not found' },
+        { status: 404 }
+      );
+    }
+
+    // Deduct small preview credit charge (preview category, medium complexity)
+    const previewCost = costForCategory('preview', 'medium');
+    try {
+      await deductUserCredits(
+        project.userId,
+        previewCost,
+        'preview:start',
+        project_id,
+        { preview: true }
+      );
+    } catch (creditError) {
+      const message =
+        creditError instanceof Error ? creditError.message : 'Failed to deduct credits';
+      const status = message.toLowerCase().includes('insufficient') ? 402 : 400;
+      return NextResponse.json({ success: false, error: message }, { status });
+    }
+
     const preview = await previewManager.start(project_id);
 
     return NextResponse.json({

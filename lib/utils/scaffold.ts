@@ -30,7 +30,7 @@ export async function scaffoldBasicNextApp(
       lint: 'next lint',
     },
     dependencies: {
-      next: '15.1.0',
+      next: '16.0.3',
       react: '19.0.0',
       'react-dom': '19.0.0',
     },
@@ -39,7 +39,7 @@ export async function scaffoldBasicNextApp(
       '@types/react': '^19.0.0',
       '@types/node': '^22.10.0',
       eslint: '^9.17.0',
-      'eslint-config-next': '15.1.0',
+      'eslint-config-next': '16.0.3',
     },
   };
 
@@ -62,7 +62,7 @@ const nextConfig = {
         headers: [
           // Allow embedding preview in the builder iframe
           { key: 'X-Frame-Options', value: 'ALLOWALL' },
-          { key: 'Content-Security-Policy', value: "frame-ancestors 'self' http://localhost:3000 http://127.0.0.1:3000;" },
+          { key: 'Content-Security-Policy', value: "frame-ancestors *;" },
         ],
       },
     ];
@@ -119,100 +119,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>{children}</body>
     </html>
-  );
-}
-`
-  );
-
-  await writeFileIfMissing(
-    path.join(projectPath, 'app/page.tsx'),
-    `export default function Home() {
-  return (
-    <div style={{
-      display: 'grid',
-      gridTemplateRows: '20px 1fr 20px',
-      alignItems: 'center',
-      justifyItems: 'center',
-      minHeight: '100vh',
-      padding: '80px',
-      gap: '64px',
-      fontFamily: 'var(--font-geist-sans)',
-    }}>
-      <main style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '32px',
-        gridRow: 2,
-        alignItems: 'center',
-      }}>
-        <h1 style={{
-          fontSize: '3rem',
-          fontWeight: 600,
-          textAlign: 'center',
-        }}>
-          Get started by editing
-        </h1>
-        <code style={{
-          fontFamily: 'monospace',
-          fontSize: '1rem',
-          padding: '12px 20px',
-          background: 'rgba(0, 0, 0, 0.05)',
-          borderRadius: '8px',
-        }}>
-          app/page.tsx
-        </code>
-      </main>
-      <footer style={{
-        gridRow: 3,
-        display: 'flex',
-        gap: '24px',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-      }}>
-        <a
-          href="https://nextjs.org/learn"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            textDecoration: 'none',
-            color: 'inherit',
-          }}
-        >
-          Learn →
-        </a>
-        <a
-          href="https://vercel.com/templates"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            textDecoration: 'none',
-            color: 'inherit',
-          }}
-        >
-          Examples →
-        </a>
-        <a
-          href="https://nextjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            textDecoration: 'none',
-            color: 'inherit',
-          }}
-        >
-          Next.js →
-        </a>
-      </footer>
-    </div>
   );
 }
 `
@@ -328,7 +234,7 @@ function resolvePort(preferredPort) {
 
   const child = spawn(
     'npx',
-    ['next', 'dev', '--port', String(port), ...passthrough],
+    ['next', 'dev', '--webpack', '--port', String(port), ...passthrough],
     {
       cwd: projectRoot,
       stdio: 'inherit',
@@ -356,6 +262,16 @@ function resolvePort(preferredPort) {
     process.exit(1);
   });
 })();
+`
+  );
+
+  await writeFileIfMissing(
+    path.join(projectPath, 'postcss.config.mjs'),
+    `export default {
+  plugins: {
+    autoprefixer: {},
+  },
+};
 `
   );
 }

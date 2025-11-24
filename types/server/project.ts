@@ -9,6 +9,7 @@ import type { BaseProject, TemplateType } from '../shared/project';
  */
 export interface ServerProject extends BaseProject {
   userId: string;
+  creditBalance?: number | null;
   repoPath?: string | null;
   templateType?: TemplateType;
   activeClaudeSessionId?: string | null;
@@ -48,4 +49,5 @@ export interface UpdateProjectInput {
   activeCursorSessionId?: string;
   repoPath?: string | null;
   userId?: string;
+  creditBalance?: number;
 }

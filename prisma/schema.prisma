@@ -19,6 +19,7 @@ model Project {
   name        String
   description String?
   status      String   @default("idle") // idle, running, stopped, error
+  creditBalance Int     @default(0)      @map("credit_balance")
 
   // Preview (legacy metadata retained for compatibility)
   previewUrl  String?  @map("preview_url")
@@ -57,9 +58,57 @@ model Project {
   commits               Commit[]
   toolUsages            ToolUsage[]
   userRequests          UserRequest[]
+  creditLedger          ProjectCreditLedger[]
 
   @@map("projects")
   @@index([userId])
+}
+
+model ProjectCreditLedger {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+
+  delta       Int
+  balanceAfter Int    @map("balance_after")
+  reason      String?
+  metadata    String? // JSON for extra context (route, request id, etc.)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@map("project_credit_ledger")
+}
+
+model UserCredit {
+  userId  String @id @map("user_id")
+  balance Int    @default(0)
+
+  ledger    UserCreditLedger[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_credits")
+}
+
+model UserCreditLedger {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  projectId String?  @map("project_id")
+
+  delta        Int
+  balanceAfter Int    @map("balance_after")
+  reason       String?
+  metadata     String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    UserCredit @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("user_credit_ledger")
 }
 
 model Message {

@@ -3,13 +3,14 @@
  * Main settings modal with tabs
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { FaCog, FaRobot, FaLock, FaPlug } from 'react-icons/fa';
+import { FaCog, FaRobot, FaLock, FaPlug, FaUserAlt } from 'react-icons/fa';
 import { SettingsModal } from './SettingsModal';
 import { GeneralSettings } from './GeneralSettings';
 import { AIAssistantSettings } from './AIAssistantSettings';
 import { EnvironmentSettings } from './EnvironmentSettings';
 import { ServiceSettings } from './ServiceSettings';
 import GlobalSettings from './GlobalSettings';
+import { useSupabaseUser } from '@/hooks/useSupabaseUser';
 
 interface ProjectSettingsProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ interface ProjectSettingsProps {
   onProjectUpdated?: (update: { name: string; description?: string | null }) => void;
 }
 
-type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services';
+type SettingsTab = 'general' | 'ai-assistant' | 'environment' | 'services' | 'profile';
 
 export function ProjectSettings({
   isOpen,
@@ -33,10 +34,19 @@ export function ProjectSettings({
   onProjectUpdated,
 }: ProjectSettingsProps) {
   const isProjectScoped = Boolean(projectId && projectId !== 'global-settings');
+  const { user, loading: userLoading } = useSupabaseUser();
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [creditLoading, setCreditLoading] = useState(false);
+  const [creditError, setCreditError] = useState<string | null>(null);
 
   const tabs = useMemo(
     () =>
       [
+        {
+          id: 'profile' as SettingsTab,
+          label: 'Profile',
+          icon: <span className="w-4 h-4 inline-flex"><FaUserAlt /></span>,
+        },
         {
           id: 'general' as SettingsTab,
           label: 'General',
@@ -85,6 +95,32 @@ export function ProjectSettings({
       icon: <span className="w-4 h-4 inline-flex"><FaRobot /></span>,
     },
   ];
+
+  useEffect(() => {
+    const fetchCredits = async () => {
+      if (!user) return;
+      setCreditLoading(true);
+      setCreditError(null);
+      try {
+        const res = await fetch(`/api/user/credits?userId=${encodeURIComponent(user.id)}`);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || 'Failed to load credits');
+        }
+        const json = await res.json();
+        const balance = json?.data?.balance;
+        setCreditBalance(typeof balance === 'number' ? balance : null);
+      } catch (err) {
+        setCreditError(err instanceof Error ? err.message : 'Failed to load credits');
+        setCreditBalance(null);
+      } finally {
+        setCreditLoading(false);
+      }
+    };
+    if (activeTab === 'profile' && user) {
+      fetchCredits();
+    }
+  }, [activeTab, user]);
 
   return (
     <>
@@ -148,6 +184,35 @@ export function ProjectSettings({
                 onClose(); // Close current modal
               }}
             />
+          )}
+
+          {activeTab === 'profile' && (
+            <div className="p-6 space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white flex items-center justify-center text-2xl font-semibold shadow-md">
+                  {user?.email?.[0]?.toUpperCase() ?? 'U'}
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">{user?.email || 'Guest user'}</h2>
+                  <p className="text-sm text-gray-500">{user?.id || 'No user ID'}</p>
+                </div>
+              </div>
+
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500">Credit balance</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {creditLoading ? 'Loading...' : creditBalance !== null ? creditBalance : '—'}
+                    </p>
+                    {creditError && <p className="text-xs text-red-500 mt-1">{creditError}</p>}
+                  </div>
+                </div>
+
+              <div className="text-sm text-gray-500 space-y-2">
+                {userLoading && <p>Checking authentication...</p>}
+                {!user && !userLoading && <p>Please sign in to view your profile and credits.</p>}
+              </div>
+            </div>
           )}
         </div>
       </div>

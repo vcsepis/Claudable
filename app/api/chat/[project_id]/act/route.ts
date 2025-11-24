@@ -20,6 +20,8 @@ import { streamManager } from '@/lib/services/stream';
 import type { ChatActRequest } from '@/types/backend';
 import { generateProjectId } from '@/lib/utils';
 import { previewManager } from '@/lib/services/preview';
+import { deductUserCredits } from '@/lib/services/credits';
+import { estimatePromptCredits } from '@/lib/services/prompt-cost';
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
@@ -244,6 +246,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const rawBody = await request.json().catch(() => ({}));
     const body = (rawBody && typeof rawBody === 'object' ? rawBody : {}) as ChatActRequest &
       Record<string, unknown>;
+    let creditBalanceRemaining: number | null = null;
 
     const project = await getProjectById(project_id);
     if (!project) {
@@ -251,6 +254,25 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         { success: false, error: 'Project not found' },
         { status: 404 },
       );
+    }
+
+    // Credit guard: estimate prompt cost and deduct from project owner balance
+    try {
+      const quote = await estimatePromptCredits(
+        typeof body.instruction === 'string' ? body.instruction : ''
+      );
+      creditBalanceRemaining = await deductUserCredits(
+        project.userId,
+        quote.cost,
+        `chat:${quote.category}:${quote.complexity}`,
+        project_id,
+        { requestId: body.requestId ?? null }
+      );
+    } catch (creditError) {
+      const message =
+        creditError instanceof Error ? creditError.message : 'Failed to deduct credits';
+      const status = message.toLowerCase().includes('insufficient') ? 402 : 400;
+      return NextResponse.json({ success: false, error: message }, { status });
     }
 
     const legacyBody = body as Record<string, unknown>;
@@ -500,6 +522,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       requestId,
       userMessageId: userMessage.id,
       conversationId: conversationId ?? null,
+      creditBalance: creditBalanceRemaining,
     });
   } catch (error) {
     console.error('[API] Failed to execute AI:', error);

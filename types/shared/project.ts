@@ -42,6 +42,7 @@ export interface BaseProject {
   userId: string;
   description?: string | null;
   status: ProjectStatus;
+  creditBalance?: number | null;
   previewUrl?: string | null;
   previewPort?: number | null;
   initialPrompt?: string | null;

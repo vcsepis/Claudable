@@ -12,6 +12,7 @@ export interface Project {
   userId: string;
   description?: string;
   status: ProjectStatus;
+  creditBalance: number;
   /**
    * Preview metadata (nullable when no dev server is running).
    */

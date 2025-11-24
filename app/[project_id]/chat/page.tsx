@@ -208,6 +208,9 @@ export default function ChatPage() {
   
   const [projectName, setProjectName] = useState<string>('');
   const [projectDescription, setProjectDescription] = useState<string>('');
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [creditLoading, setCreditLoading] = useState<boolean>(false);
+  const [creditError, setCreditError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const [tree, setTree] = useState<Entry[]>([]);
@@ -404,6 +407,9 @@ export default function ChatPage() {
       }
 
       const result = await r.json();
+      if (typeof result?.creditBalance === 'number') {
+        setCreditBalance(result.creditBalance);
+      }
       const returnedConversationId =
         typeof result?.conversationId === 'string'
           ? result.conversationId
@@ -1543,11 +1549,15 @@ const persistProjectPreferences = useCallback(
   }, [preferredCli, selectedModel, updatePreferredCli, updateSelectedModel]);
 
   const loadProjectInfo = useCallback(async (): Promise<{ cli?: string; model?: string; status?: ProjectStatus }> => {
+    setCreditLoading(true);
     try {
       const r = await fetch(`${API_BASE}/api/projects/${projectId}`);
       if (!r.ok) {
         setProjectName(`Project ${projectId.slice(0, 8)}`);
         setProjectDescription('');
+        setCreditBalance(null);
+        setCreditError(null);
+        setCreditLoading(false);
         setHasInitialPrompt(false);
         localStorage.setItem(`project_${projectId}_hasInitialPrompt`, 'false');
         setProjectStatus('active');
@@ -1591,6 +1601,15 @@ const persistProjectPreferences = useCallback(
       const followGlobal = !rawPreferredCli && !rawSelectedModel;
       setUsingGlobalDefaults(followGlobal);
       setProjectDescription(project.description || '');
+      const balance =
+        typeof project?.creditBalance === 'number'
+          ? project.creditBalance
+          : typeof project?.credit_balance === 'number'
+          ? project.credit_balance
+          : null;
+      setCreditBalance(balance);
+      setCreditError(null);
+      setCreditLoading(false);
 
       if (project.initial_prompt) {
         setHasInitialPrompt(true);
@@ -1623,6 +1642,9 @@ const persistProjectPreferences = useCallback(
       console.error('Failed to load project info:', error);
       setProjectName(`Project ${projectId.slice(0, 8)}`);
       setProjectDescription('');
+      setCreditBalance(null);
+      setCreditError(error instanceof Error ? error.message : 'Failed to load credits');
+      setCreditLoading(false);
       setHasInitialPrompt(false);
       localStorage.setItem(`project_${projectId}_hasInitialPrompt`, 'false');
       setProjectStatus('active');
@@ -2043,6 +2065,9 @@ const persistProjectPreferences = useCallback(
       }
 
       const result = await r.json();
+      if (typeof result?.creditBalance === 'number') {
+        setCreditBalance(result.creditBalance);
+      }
 
       console.log('📸 Act API response received:', {
         success: result.success,
@@ -2359,7 +2384,7 @@ const persistProjectPreferences = useCallback(
             className="h-full border-r border-gray-200 flex flex-col"
           >
             {/* Chat header */}
-            <div className="bg-white border-b border-gray-200 p-4 h-[73px] flex items-center">
+            <div className="bg-white border-b border-gray-200 p-4 h-[73px] flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <button 
                   onClick={() => router.push('/')}
@@ -2377,6 +2402,23 @@ const persistProjectPreferences = useCallback(
                       {projectDescription}
                     </p>
                   )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {creditError && (
+                  <span className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-2 py-1">
+                    {creditError}
+                  </span>
+                )}
+                <div
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border ${
+                    creditBalance !== null && creditBalance <= 50
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  } ${creditLoading ? 'animate-pulse' : ''}`}
+                  title="Remaining project credits"
+                >
+                  {creditLoading ? 'Credits: …' : `Credits: ${creditBalance ?? '—'}`}
                 </div>
               </div>
             </div>

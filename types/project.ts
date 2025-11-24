@@ -24,6 +24,7 @@ export interface Project {
   userId: string;
   description?: string | null;
   status?: ProjectStatus;
+  creditBalance?: number | null;
   previewUrl?: string | null;
   previewPort?: number | null;
   createdAt: string;

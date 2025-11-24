@@ -7,6 +7,7 @@ import type { Project, CreateProjectInput, UpdateProjectInput } from '@/types/ba
 import fs from 'fs/promises';
 import path from 'path';
 import { normalizeModelId, getDefaultModelForCli } from '@/lib/constants/cliModels';
+import { ensureUserCredits } from '@/lib/services/credits';
 
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
@@ -63,6 +64,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
   for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
     try {
       const projectPath = path.join(PROJECTS_DIR_ABSOLUTE, currentId);
+      const userCredits = await ensureUserCredits(input.userId || 'anonymous');
       await fs.mkdir(projectPath, { recursive: true });
 
       const project = await prisma.project.create({
@@ -83,6 +85,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
           lastActiveAt: new Date(),
           previewUrl: null,
           previewPort: null,
+          creditBalance: userCredits,
         },
       });
 
@@ -135,10 +138,13 @@ export async function updateProject(
     ? normalizeModelId(targetCli, input.selectedModel)
     : undefined;
 
+  // Prevent client-driven credit mutations
+  const { creditBalance: _ignoredCreditBalance, ...safeInput } = input as Record<string, unknown>;
+
   const project = await prisma.project.update({
     where: { id },
     data: {
-      ...input,
+      ...(safeInput as UpdateProjectInput),
       ...(input.selectedModel
         ? { selectedModel: normalizedModel }
         : {}),
