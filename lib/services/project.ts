@@ -8,6 +8,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { normalizeModelId, getDefaultModelForCli } from '@/lib/constants/cliModels';
 import { ensureUserCredits } from '@/lib/services/credits';
+import { pushProjectToGitHub } from '@/lib/services/github';
 
 const PROJECTS_DIR = process.env.PROJECTS_DIR || './data/projects';
 const PROJECTS_DIR_ABSOLUTE = path.isAbsolute(PROJECTS_DIR)
@@ -90,10 +91,19 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       });
 
       console.log(`[ProjectService] Created project: ${project.id}`);
-      return {
+      const normalizedProject: Project = {
         ...project,
         selectedModel: normalizeModelId(project.preferredCli ?? 'claude', project.selectedModel ?? undefined),
       } as Project;
+
+      // Ensure GitHub preview branch exists immediately after project creation
+      try {
+        await pushProjectToGitHub(normalizedProject.id);
+      } catch (pushError: any) {
+        console.warn(`[ProjectService] Auto-create GitHub branch failed for ${normalizedProject.id}:`, pushError?.message || pushError);
+      }
+
+      return normalizedProject;
     } catch (error: any) {
       lastError = error;
 

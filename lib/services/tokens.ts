@@ -87,21 +87,25 @@ export async function deleteServiceToken(tokenId: string): Promise<boolean> {
 export async function getPlainServiceToken(provider: string): Promise<string | null> {
   assertProvider(provider);
 
+  // Env overrides DB-stored token so we can rotate credentials without DB changes
+  if (provider === 'github') {
+    const envToken = process.env.GITHUB_TOKEN || process.env.GITHUB_OAUTH_CLIENT_ID;
+    if (envToken && envToken.trim().length > 0) {
+      return envToken.trim();
+    }
+  }
+  if (provider === 'vercel') {
+    const envToken = process.env.VERCEL_TOKEN || (process.env as any).vercel_TOKEN;
+    if (envToken && envToken.trim().length > 0) {
+      return envToken.trim();
+    }
+  }
+
   const record = await prisma.serviceToken.findFirst({
     where: { provider },
   });
 
-  if (!record) {
-    if (provider === 'github') {
-      const envToken = process.env.GITHUB_OAUTH_CLIENT_ID || process.env.GITHUB_TOKEN;
-      if (envToken && envToken.trim().length > 0) {
-        return envToken.trim();
-      }
-    }
-    return null;
-  }
-
-  return record.token;
+  return record ? record.token : null;
 }
 
 export async function touchServiceToken(provider: string): Promise<void> {

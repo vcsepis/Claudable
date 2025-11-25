@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   readProjectFileContent,
-  writeProjectFileContent,
+  writeAndPushProjectFileContent,
   FileBrowserError,
 } from '@/lib/services/file-browser';
 
@@ -72,7 +72,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    await writeProjectFileContent(project_id, filePath, content);
+    await writeAndPushProjectFileContent(project_id, filePath, content);
 
     return NextResponse.json({
       success: true,

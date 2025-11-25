@@ -1005,14 +1005,10 @@ class PreviewManager {
   }
 
   private toInfo(processInfo: PreviewProcess): PreviewInfo {
-    const exposedUrl = resolveExposedPreviewUrl(
-      processInfo.url,
-      processInfo.port
-    );
-
     return {
       port: processInfo.port,
-      url: exposedUrl,
+      // Always return the direct local preview URL to avoid iframe blocks on external hosts
+      url: processInfo.url,
       status: processInfo.status,
       logs: [...processInfo.logs],
       pid: processInfo.process?.pid,

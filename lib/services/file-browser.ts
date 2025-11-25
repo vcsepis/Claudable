@@ -5,6 +5,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { getProjectById } from '@/lib/services/project';
+import { pushProjectToGitHub } from '@/lib/services/github';
 import type { ProjectFileEntry } from '@/types/backend';
 import type { Project } from '@/types/backend';
 
@@ -261,4 +262,17 @@ export async function writeProjectFileContent(
   } catch (error) {
     throw new FileBrowserError('Failed to write file', 500);
   }
+}
+
+/**
+ * Convenience helper: write a file and immediately push the change to GitHub.
+ * Use this for agent-driven edits so changes are always propagated.
+ */
+export async function writeAndPushProjectFileContent(
+  projectId: string,
+  filePath: string,
+  content: string
+) {
+  await writeProjectFileContent(projectId, filePath, content);
+  await pushProjectToGitHub(projectId);
 }

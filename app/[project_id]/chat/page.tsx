@@ -325,6 +325,16 @@ export default function ChatPage() {
     previewUrlRef.current = previewUrl;
   }, [previewUrl]);
 
+  // When a production deployment exists, prefer showing that URL in the iframe
+  useEffect(() => {
+    if (!publishedUrl) return;
+    const normalized = publishedUrl.startsWith('http') ? publishedUrl : `https://${publishedUrl}`;
+    if (previewUrlRef.current !== normalized) {
+      setPreviewUrl(normalized);
+      setCurrentRoute('/');
+    }
+  }, [publishedUrl]);
+
   useEffect(() => {
     if (!isDeepThinkingSupported && thinkingMode) {
       setThinkingMode(false);
@@ -677,7 +687,7 @@ const persistProjectPreferences = useCallback(
         if (vercelConnection && vercelConnection.service_data) {
           const sd = vercelConnection.service_data;
           // Only use actual deployment URLs, not predicted ones
-          const rawUrl = sd.last_deployment_url || null;
+          const rawUrl = sd.production_domain || sd.last_deployment_url || null;
           const url = rawUrl ? (String(rawUrl).startsWith('http') ? String(rawUrl) : `https://${rawUrl}`) : null;
           setPublishedUrl(url || null);
           if (url) {
@@ -733,8 +743,9 @@ const persistProjectPreferences = useCallback(
           console.log('🔍 Deployment completed - no active deployment');
 
           // Set final deployment URL
-          if (data.last_deployment_url) {
-            const url = String(data.last_deployment_url).startsWith('http') ? data.last_deployment_url : `https://${data.last_deployment_url}`;
+          const finalUrl = data.production_domain || data.last_deployment_url;
+          if (finalUrl) {
+            const url = String(finalUrl).startsWith('http') ? finalUrl : `https://${finalUrl}`;
             console.log('🔍 Deployment complete! URL:', url);
             setPublishedUrl(url);
             setDeploymentStatus('ready');
@@ -784,8 +795,9 @@ const persistProjectPreferences = useCallback(
           return;
         }
         
-        if (isReady && data.deployment_url) {
-          const url = String(data.deployment_url).startsWith('http') ? data.deployment_url : `https://${data.deployment_url}`;
+        if (isReady && (data.production_domain || data.deployment_url)) {
+          const finalUrl = data.production_domain || data.deployment_url;
+          const url = finalUrl.startsWith('http') ? finalUrl : `https://${finalUrl}`;
           console.log('🔍 Deployment complete! URL:', url);
           setPublishedUrl(url);
           setDeploymentStatus('ready');
@@ -854,7 +866,13 @@ const persistProjectPreferences = useCallback(
 
       setPreviewInitializationMessage('Preview ready!');
       setTimeout(() => {
-        setPreviewUrl(typeof data.url === 'string' ? data.url : null);
+        const normalizedPublished = publishedUrl
+          ? (publishedUrl.startsWith('http') ? publishedUrl : `https://${publishedUrl}`)
+          : null;
+        const nextUrl =
+          normalizedPublished ||
+          (typeof data.url === 'string' ? data.url : null);
+        setPreviewUrl(nextUrl);
         setIsStartingPreview(false);
         setCurrentRoute('/'); // Reset to root route when starting
       }, 1000);
@@ -867,8 +885,9 @@ const persistProjectPreferences = useCallback(
 
   // Navigate to specific route in iframe
   const navigateToRoute = (route: string) => {
-    if (previewUrl && iframeRef.current) {
-      const baseUrl = previewUrl.split('?')[0]; // Remove any query params
+    const base = previewUrlRef.current || (publishedUrl ? (publishedUrl.startsWith('http') ? publishedUrl : `https://${publishedUrl}`) : null);
+    if (base && iframeRef.current) {
+      const baseUrl = base.split('?')[0]; // Remove any query params
       // Ensure route starts with /
       const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
       const newUrl = `${baseUrl}${normalizedRoute}`;
@@ -2766,8 +2785,9 @@ const persistProjectPreferences = useCallback(
                                   }
                                   
                                   // Only set URL if deployment is already ready
-                                  if (data.status === 'READY' && data.deployment_url) {
-                                    const url = data.deployment_url.startsWith('http') ? data.deployment_url : `https://${data.deployment_url}`;
+                                  if (data.status === 'READY' && (data.production_domain || data.deployment_url)) {
+                                    const finalUrl = data.production_domain || data.deployment_url;
+                                    const url = finalUrl.startsWith('http') ? finalUrl : `https://${finalUrl}`;
                                     setPublishedUrl(url);
                                     setDeploymentStatus('ready');
                                   }
@@ -3391,8 +3411,9 @@ const persistProjectPreferences = useCallback(
                       const data = await vercelRes.json();
                       setDeploymentStatus('deploying');
                       if (data.deployment_id) startDeploymentPolling(data.deployment_id);
-                      if (data.ready && data.deployment_url) {
-                        const url = data.deployment_url.startsWith('http') ? data.deployment_url : `https://${data.deployment_url}`;
+                      if (data.ready && (data.production_domain || data.deployment_url)) {
+                        const finalUrl = data.production_domain || data.deployment_url;
+                        const url = finalUrl.startsWith('http') ? finalUrl : `https://${finalUrl}`;
                         setPublishedUrl(url);
                         setDeploymentStatus('ready');
                       }

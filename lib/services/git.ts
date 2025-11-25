@@ -92,7 +92,10 @@ function runGit(args: string[], cwd: string): string {
         : typeof result.stdout === 'string'
         ? result.stdout
         : undefined);
-    throw new GitError(`Git command failed: git ${args.join(' ')}`, output);
+    const message = output
+      ? `Git command failed: git ${args.join(' ')} - ${output.trim()}`
+      : `Git command failed: git ${args.join(' ')}`;
+    throw new GitError(message, output);
   }
 
   return result.stdout.trim();
@@ -190,4 +193,14 @@ export function checkoutOrCreateBranch(repoPath: string, branch: string) {
     // Create the branch if it does not exist
     runGit(['checkout', '-B', branch], repoPath);
   }
+}
+
+export function ensureInitialCommit(repoPath: string, message = 'Initial commit') {
+  try {
+    runGit(['rev-parse', '--verify', 'HEAD'], repoPath);
+    return;
+  } catch {
+    // no commits yet
+  }
+  runGit(['commit', '--allow-empty', '-m', message], repoPath);
 }

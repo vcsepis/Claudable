@@ -13,6 +13,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
       success: true,
       deployment_id: result.deploymentId ?? null,
       deployment_url: result.deploymentUrl ?? null,
+      production_domain: result.productionDomain ?? null,
       status: result.status ?? null,
     });
   } catch (error) {

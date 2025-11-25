@@ -83,6 +83,43 @@ function normalizeDeploymentUrl(url?: string | null): string | null {
   return `https://${url}`;
 }
 
+interface VercelDomainResponse {
+  domains?: Array<{
+    name: string;
+    apexName?: string;
+  }>;
+}
+
+async function fetchProductionDomain(
+  token: string,
+  projectIdOrName: string,
+  teamId?: string | null,
+): Promise<string | null> {
+  try {
+    const response = await vercelFetch<VercelDomainResponse>(
+      token,
+      `/v9/projects/${encodeURIComponent(projectIdOrName)}/domains`,
+      {
+        method: 'GET',
+        teamId,
+      },
+    );
+
+    const domains = Array.isArray(response?.domains) ? response.domains : [];
+    const vercelDomain =
+      domains.find((domain) => domain?.apexName === 'vercel.app') ||
+      domains.find((domain) => typeof domain?.name === 'string' && domain.name.endsWith('.vercel.app'));
+
+    return vercelDomain?.name ?? null;
+  } catch (error) {
+    if (error instanceof VercelError && error.status === 404) {
+      return null;
+    }
+    console.warn('[Vercel] Failed to fetch project domains:', error);
+    return null;
+  }
+}
+
 function createEmptyDeploymentResponse(
   overrides: Partial<DeploymentStatusResponse> = {},
 ): DeploymentStatusResponse {
@@ -92,6 +129,7 @@ function createEmptyDeploymentResponse(
     deployment_id: null,
     deployment_url: null,
     last_deployment_url: null,
+    production_domain: null,
     inspector_url: null,
     vercel_configured: true,
     ...overrides,
@@ -259,6 +297,15 @@ export async function connectVercelProject(
 
   const dashboardUrl = `https://vercel.com/dashboard/projects/${vercelProject.id}`;
   const latestDeployment = Array.isArray(vercelProject.latestDeployments) ? vercelProject.latestDeployments[0] : undefined;
+  const projectIdentifier = vercelProject.id || vercelProject.name;
+  const fetchedDomain = projectIdentifier
+    ? await fetchProductionDomain(token, projectIdentifier, teamId)
+    : null;
+  const productionDomain =
+    fetchedDomain ||
+    (typeof vercelProject.name === 'string' && vercelProject.name.trim().length > 0
+      ? `${vercelProject.name}.vercel.app`
+      : null);
 
   const serviceData: VercelProjectServiceData = {
     project_id: vercelProject.id,
@@ -266,6 +313,7 @@ export async function connectVercelProject(
     project_url: vercelProject.link?.url ?? dashboardUrl,
     github_repo: linkedRepo,
     team_id: teamId,
+    production_domain: productionDomain,
     connected_at: new Date().toISOString(),
     last_deployment_id: latestDeployment?.id ?? null,
     last_deployment_status: latestDeployment?.readyState ?? null,
@@ -315,6 +363,15 @@ export async function triggerVercelDeployment(projectId: string) {
   // Fetch GitHub repository details directly
   const repoInfo = await getGithubRepositoryDetailsInternal(token, githubRepo.owner, githubRepo.repoName);
   const ref = repoBranch || repoInfo.default_branch || 'main';
+  const projectIdentifier = data.project_id ?? data.project_name ?? null;
+  const fetchedDomain = projectIdentifier
+    ? await fetchProductionDomain(token, projectIdentifier, teamId)
+    : null;
+  const canonicalDomain =
+    fetchedDomain ||
+    (typeof data.project_name === 'string' && data.project_name.trim().length > 0
+      ? `${data.project_name}.vercel.app`
+      : `${repoInfo.name}.vercel.app`);
 
   const deploymentPayload = {
     project: data.project_id,
@@ -352,6 +409,7 @@ export async function triggerVercelDeployment(projectId: string) {
   );
 
   const deploymentUrl = normalizeDeploymentUrl(deployment?.url);
+  const resolvedDeploymentUrl = normalizeDeploymentUrl(fetchedDomain ?? deployment?.url ?? canonicalDomain);
   const readyState = deployment?.readyState ?? 'QUEUED';
 
   await updateProjectServiceData(projectId, 'vercel', {
@@ -359,6 +417,7 @@ export async function triggerVercelDeployment(projectId: string) {
     last_deployment_id: deployment?.id ?? null,
     last_deployment_status: readyState,
     last_deployment_url: deploymentUrl,
+    production_domain: canonicalDomain,
     last_deployment_at: deployment?.createdAt
       ? new Date(deployment.createdAt).toISOString()
       : new Date().toISOString(),
@@ -367,8 +426,9 @@ export async function triggerVercelDeployment(projectId: string) {
   return {
     success: true,
     deploymentId: deployment?.id ?? null,
-    deploymentUrl,
+    deploymentUrl: resolvedDeploymentUrl ?? deploymentUrl,
     status: readyState,
+    productionDomain: canonicalDomain,
   };
 }
 
@@ -392,6 +452,11 @@ export async function getCurrentDeploymentStatus(projectId: string) {
   }
 
   const teamId = data.team_id ?? null;
+  const projectIdentifier = data.project_id ?? data.project_name ?? null;
+  const fetchedDomain = projectIdentifier
+    ? await fetchProductionDomain(token, projectIdentifier, teamId)
+    : null;
+  const preferredDomain = fetchedDomain || data.production_domain || null;
 
   const buildResponse = (deployment?: {
     id: string;
@@ -400,7 +465,8 @@ export async function getCurrentDeploymentStatus(projectId: string) {
     inspectorUrl?: string;
     createdAt?: number;
   }): DeploymentStatusResponse => {
-    const deploymentUrl = normalizeDeploymentUrl(deployment?.url ?? data.last_deployment_url);
+    const normalizedDeploymentUrl = normalizeDeploymentUrl(deployment?.url ?? data.last_deployment_url);
+    const deploymentUrl = normalizeDeploymentUrl(preferredDomain ?? normalizedDeploymentUrl);
     const readyState = deployment?.readyState ?? data.last_deployment_status ?? null;
     const deploymentId = deployment?.id ?? data.last_deployment_id ?? null;
     const isActive = readyState === 'QUEUED' || readyState === 'BUILDING';
@@ -408,10 +474,11 @@ export async function getCurrentDeploymentStatus(projectId: string) {
     return {
       has_deployment: Boolean(isActive && deploymentId),
       status: readyState ?? null,
-      last_deployment_url: deploymentUrl ?? null,
+      last_deployment_url: normalizedDeploymentUrl ?? null,
       deployment_id: deploymentId ?? null,
       inspector_url: deployment?.inspectorUrl ?? null,
       deployment_url: deploymentUrl ?? null,
+      production_domain: preferredDomain ?? null,
       vercel_configured: true,
     };
   };
@@ -440,6 +507,7 @@ export async function getCurrentDeploymentStatus(projectId: string) {
         last_deployment_id: deployment?.id ?? data.last_deployment_id,
         last_deployment_status: readyState,
         last_deployment_url: deploymentUrl,
+        production_domain: preferredDomain ?? data.production_domain ?? null,
         last_deployment_at: deployment?.createdAt
           ? new Date(deployment.createdAt).toISOString()
           : data.last_deployment_at ?? new Date().toISOString(),
@@ -468,7 +536,9 @@ export async function getCurrentDeploymentStatus(projectId: string) {
 
   const latest = Array.isArray(deployments?.deployments) ? deployments.deployments[0] : undefined;
   if (!latest) {
-    return createEmptyDeploymentResponse();
+    return createEmptyDeploymentResponse({
+      production_domain: preferredDomain ?? data.production_domain ?? null,
+    });
   }
 
   const deploymentUrl = normalizeDeploymentUrl(latest.url);
@@ -478,6 +548,7 @@ export async function getCurrentDeploymentStatus(projectId: string) {
     last_deployment_id: latest.id ?? data.last_deployment_id ?? null,
     last_deployment_status: readyState,
     last_deployment_url: deploymentUrl,
+    production_domain: preferredDomain ?? data.production_domain ?? null,
     last_deployment_at: latest.createdAt
       ? new Date(latest.createdAt).toISOString()
       : data.last_deployment_at ?? new Date().toISOString(),

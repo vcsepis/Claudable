@@ -198,7 +198,7 @@ export default function ServiceConnectionModal({
         
         if (response.ok) {
           const data = await response.json();
-          const deploymentUrl = data.deployment_url ?? data.url ?? null;
+          const deploymentUrl = data.production_domain ?? data.deployment_url ?? data.url ?? null;
           const status = data.status ?? 'queued';
           if (deploymentUrl) {
             const formatted = deploymentUrl.startsWith('http') ? deploymentUrl : `https://${deploymentUrl}`;

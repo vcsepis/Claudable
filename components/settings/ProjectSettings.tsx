@@ -3,7 +3,7 @@
  * Main settings modal with tabs
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { FaCog, FaRobot, FaLock, FaPlug, FaUserAlt } from 'react-icons/fa';
+import { FaCog, FaRobot, FaLock, FaPlug, FaUser } from 'react-icons/fa';
 import { SettingsModal } from './SettingsModal';
 import { GeneralSettings } from './GeneralSettings';
 import { AIAssistantSettings } from './AIAssistantSettings';
@@ -45,7 +45,7 @@ export function ProjectSettings({
         {
           id: 'profile' as SettingsTab,
           label: 'Profile',
-          icon: <span className="w-4 h-4 inline-flex"><FaUserAlt /></span>,
+          icon: <span className="w-4 h-4 inline-flex"><FaUser /></span>,
         },
         {
           id: 'general' as SettingsTab,

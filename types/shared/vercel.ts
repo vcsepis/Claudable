@@ -36,6 +36,7 @@ export interface VercelProjectServiceData {
   project_name?: string | null;
   project_url?: string | null;
   github_repo?: string | null;
+  production_domain?: string | null;
   team_id?: string | null;
   connected_at?: string;
   last_deployment_id?: string | null;
@@ -50,6 +51,7 @@ export interface DeploymentStatusResponse {
   deployment_id: string | null;
   deployment_url: string | null;
   last_deployment_url: string | null;
+  production_domain: string | null;
   inspector_url: string | null;
   vercel_configured: boolean;
 }

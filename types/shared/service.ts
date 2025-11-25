@@ -33,6 +33,7 @@ export interface VercelServiceData {
   project_name: string;
   project_url?: string | null;
   github_repo?: string | null;
+  production_domain?: string | null;
   team_id?: string | null;
   connected_at?: string;
   last_deployment_id?: string | null;
