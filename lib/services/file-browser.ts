@@ -274,5 +274,14 @@ export async function writeAndPushProjectFileContent(
   content: string
 ) {
   await writeProjectFileContent(projectId, filePath, content);
-  await pushProjectToGitHub(projectId);
+  try {
+    await pushProjectToGitHub(projectId);
+  } catch (error) {
+    // Surface a clear, user-facing error so the UI can warn that GitHub sync failed
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : 'Failed to push changes to GitHub';
+    throw new FileBrowserError(message, 502);
+  }
 }

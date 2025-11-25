@@ -149,6 +149,17 @@ function sanitizeBranchName(source: string | null | undefined, fallback: string)
   return cleaned || `project-${fallback}`;
 }
 
+function sanitizeRepoName(source: string | null | undefined, fallback: string) {
+  const base = (source ?? '').trim() || fallback;
+  const cleaned = base
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return cleaned || `project-${fallback}`;
+}
+
 function sanitizeVercelProjectName(source: string | null | undefined, fallback: string) {
   const base = (source ?? '').trim() || fallback;
   const cleaned = base
@@ -277,24 +288,14 @@ export async function pushProjectToGitHub(projectId: string) {
     let repoName: string | undefined =
       typeof data?.repo_name === 'string' && data.repo_name.trim().length > 0
         ? data.repo_name
-        : repoFromEnv;
+        : undefined;
 
-    // Prefer explicit env configuration when provided
-    if (repoFromEnv) {
-      const login = ownerFromEnv || user.login;
-      owner = login;
-      repoName = repoFromEnv;
-      cloneUrl = `https://github.com/${login}/${repoFromEnv}.git`;
-      defaultBranch = defaultBranch || 'main';
-    } else if ((!cloneUrl || !owner) && repoName) {
-      // Fallback: use stored repo name with authenticated user as owner if missing
-      owner = owner || user.login;
-      cloneUrl = cloneUrl || `https://github.com/${owner}/${repoName}.git`;
-    }
+    // Always create/use a dedicated repo per project on the authenticated user's account
+    const normalizedRepoName = sanitizeRepoName(repoName ?? project.name ?? projectId, projectId);
+    owner = ownerFromEnv || owner || user.login;
+    repoName = normalizedRepoName;
 
-    if (!cloneUrl || !owner) {
-      throw new GitHubError('GitHub repository not connected', 404);
-    }
+    cloneUrl = cloneUrl || `https://github.com/${owner}/${repoName}.git`;
 
     // Ensure repository exists (create if missing when using env fallback)
     try {
@@ -314,8 +315,8 @@ export async function pushProjectToGitHub(projectId: string) {
 
     const repoPath = await ensureProjectRepository(projectId, project.repoPath);
     ensureGitRepository(repoPath);
-    // Always push to a preview branch named after the project id to avoid touching main
-    const branchName = sanitizeBranchName(`preview-${projectId}`, projectId);
+    // Push to main branch for dedicated per-project repo
+    const branchName = sanitizeBranchName(defaultBranch || 'main', projectId);
     const authenticatedUrl = String(cloneUrl).replace('https://', `https://${owner}:${token}@`);
     const userName = user.name || user.login;
     const userEmail = user.email || `${user.login}@users.noreply.github.com`;
@@ -325,7 +326,7 @@ export async function pushProjectToGitHub(projectId: string) {
     const committed = commitAll(repoPath, `Update from monmi (${branchName})`);
     if (!committed) {
       // Ensure branch exists remotely even if there are no new changes
-      ensureInitialCommit(repoPath, 'chore: ensure preview branch exists');
+      ensureInitialCommit(repoPath, 'chore: ensure main branch exists');
     }
 
     pushToRemote(repoPath, 'origin', branchName);
@@ -333,7 +334,6 @@ export async function pushProjectToGitHub(projectId: string) {
     await updateProjectServiceData(projectId, 'github', {
       last_pushed_at: new Date().toISOString(),
       last_pushed_branch: branchName,
-      preview_branch: branchName,
       default_branch: defaultBranch,
       repo_name: repoName,
       owner,
