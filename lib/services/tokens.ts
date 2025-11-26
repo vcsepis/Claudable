@@ -95,7 +95,11 @@ export async function getPlainServiceToken(provider: string): Promise<string | n
     }
   }
   if (provider === 'vercel') {
-    const envToken = process.env.VERCEL_TOKEN || (process.env as any).vercel_TOKEN;
+    const envToken =
+      process.env.RENDER_TOKEN ||
+      (process.env as any).render_TOKEN ||
+      process.env.VERCEL_TOKEN ||
+      (process.env as any).vercel_TOKEN;
     if (envToken && envToken.trim().length > 0) {
       return envToken.trim();
     }

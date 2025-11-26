@@ -11,7 +11,7 @@ import type {
   DeploymentStatusResponse,
 } from '@/types/shared';
 
-const VERCEL_API_BASE = 'https://api.vercel.com';
+const RENDER_API_BASE = 'https://api.render.com/v1';
 
 class VercelError extends Error {
   constructor(message: string, readonly status?: number) {
@@ -26,19 +26,14 @@ async function vercelFetch<T = any>(
   {
     method = 'GET',
     body,
-    teamId,
     query,
   }: {
     method?: string;
     body?: any;
-    teamId?: string | null;
     query?: Record<string, string | undefined>;
   } = {},
 ): Promise<T> {
-  const url = new URL(`${VERCEL_API_BASE}${endpoint}`);
-  if (teamId) {
-    url.searchParams.set('teamId', teamId);
-  }
+  const url = new URL(`${RENDER_API_BASE}${endpoint}`);
   if (query) {
     Object.entries(query).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
@@ -65,7 +60,7 @@ async function vercelFetch<T = any>(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new VercelError(errorText || `Vercel API request failed (${response.status})`, response.status);
+    throw new VercelError(errorText || `Render API request failed (${response.status})`, response.status);
   }
 
   if (response.status === 204) {
@@ -159,31 +154,8 @@ export async function checkVercelProjectAvailability(
     throw new VercelError('Vercel token not configured', 401);
   }
 
-  try {
-    const response = await vercelFetch<{ projects: Array<{ name: string }> }>(
-      token,
-      '/v9/projects',
-      {
-        method: 'GET',
-        teamId: options?.teamId ?? null,
-        query: {
-          search: projectName,
-          limit: '1',
-        },
-      },
-    );
-
-    const exists = Array.isArray(response?.projects)
-      ? response.projects.some((project) => project.name === projectName)
-      : false;
-
-    return { available: !exists };
-  } catch (error) {
-    if (error instanceof VercelError && error.status === 404) {
-      return { available: true };
-    }
-    throw error;
-  }
+  // Render service names are per account; assume available to keep UX smooth.
+  return { available: true };
 }
 
 async function fetchExistingProject(
@@ -224,103 +196,62 @@ export async function connectVercelProject(
     throw new VercelError('Project not found', 404);
   }
 
-  const teamId = options?.teamId ?? null;
-
-  let linkedRepo = options?.githubRepo ?? null;
-  if (!linkedRepo) {
-    const githubRepo = await getProjectGitHubRepo(projectId);
-    if (githubRepo) {
-      linkedRepo = githubRepo.fullName;
-    }
+  const githubRepoInfo = await getProjectGitHubRepo(projectId);
+  if (!githubRepoInfo) {
+    throw new VercelError('GitHub repository not connected', 400);
   }
+
+  const githubService = await getProjectService(projectId, 'github');
+  const githubData = githubService?.serviceData as Record<string, any> | undefined;
+  const branch =
+    typeof githubData?.preview_branch === 'string' && githubData.preview_branch.length > 0
+      ? githubData.preview_branch
+      : typeof githubData?.default_branch === 'string' && githubData.default_branch.length > 0
+      ? githubData.default_branch
+      : 'main';
+
+  const repoUrl = `https://github.com/${githubRepoInfo.owner}/${githubRepoInfo.repoName}`;
+  const ownerId = process.env.RENDER_OWNER || undefined;
+  const buildCommand = process.env.RENDER_BUILD_COMMAND || 'npm install && npm run build';
+  const publishPath = process.env.RENDER_PUBLISH_PATH || 'out';
+  const rootDir = process.env.RENDER_ROOT_DIR || '';
 
   const payload: Record<string, unknown> = {
     name: projectName,
-    framework: 'nextjs',
+    ownerId,
+    serviceDetails: {
+      type: 'static_site',
+      repo: repoUrl,
+      branch,
+      buildCommand,
+      publishPath,
+      rootDir,
+    },
   };
 
-  if (linkedRepo) {
-    payload.gitRepository = {
-      type: 'github',
-      repo: linkedRepo,
-    };
-  }
+  const service = await vercelFetch<any>(token, '/services', {
+    method: 'POST',
+    body: payload,
+  });
 
-  let vercelProject: VercelProjectResponse | null = null;
-
-  try {
-    vercelProject = await vercelFetch<VercelProjectResponse>(
-      token,
-      '/v10/projects',
-      {
-        method: 'POST',
-        body: payload,
-        teamId,
-      },
-    );
-  } catch (error) {
-    if (error instanceof VercelError && error.status === 409) {
-      vercelProject = await fetchExistingProject(token, projectName, teamId);
-    } else {
-      throw error;
-    }
-  }
-
-  if (!vercelProject) {
-    throw new VercelError('Failed to create or retrieve Vercel project', 500);
-  }
-
-  const envVars = await listEnvVars(projectId);
-  for (const envVar of envVars) {
-    try {
-      await vercelFetch(
-        token,
-        `/v10/projects/${vercelProject.id}/env`,
-        {
-          method: 'POST',
-          teamId,
-          body: {
-            key: envVar.key,
-            value: envVar.value,
-            target: ['production', 'preview', 'development'],
-            type: envVar.is_secret ? 'encrypted' : 'plain',
-          },
-        },
-      );
-    } catch (error) {
-      if (error instanceof VercelError && error.status === 409) {
-        continue;
-      }
-      console.warn('[Vercel] Failed to sync env var:', envVar.key, error);
-    }
-  }
-
-  const dashboardUrl = `https://vercel.com/dashboard/projects/${vercelProject.id}`;
-  const latestDeployment = Array.isArray(vercelProject.latestDeployments) ? vercelProject.latestDeployments[0] : undefined;
-  const projectIdentifier = vercelProject.id || vercelProject.name;
-  const fetchedDomain = projectIdentifier
-    ? await fetchProductionDomain(token, projectIdentifier, teamId)
-    : null;
-  const productionDomain =
-    fetchedDomain ||
-    (typeof vercelProject.name === 'string' && vercelProject.name.trim().length > 0
-      ? `${vercelProject.name}.vercel.app`
-      : null);
+  const publishUrl =
+    service?.serviceDetails?.staticSite?.publishUrl ||
+    service?.serviceDetails?.staticSite?.url ||
+    service?.serviceDetails?.url ||
+    null;
 
   const serviceData: VercelProjectServiceData = {
-    project_id: vercelProject.id,
-    project_name: vercelProject.name,
-    project_url: vercelProject.link?.url ?? dashboardUrl,
-    github_repo: linkedRepo,
-    team_id: teamId,
-    production_domain: productionDomain,
+    project_id: service?.id ?? null,
+    project_name: service?.name ?? projectName,
+    project_url: service?.dashboardUrl ?? null,
+    github_repo: `${githubRepoInfo.owner}/${githubRepoInfo.repoName}`,
+    team_id: ownerId ?? null,
+    production_domain: publishUrl ?? null,
     connected_at: new Date().toISOString(),
-    last_deployment_id: latestDeployment?.id ?? null,
-    last_deployment_status: latestDeployment?.readyState ?? null,
-    last_deployment_url: normalizeDeploymentUrl(latestDeployment?.url),
-    last_deployment_at: latestDeployment?.createdAt
-      ? new Date(latestDeployment.createdAt).toISOString()
-      : null,
+    last_deployment_id: null,
+    last_deployment_status: null,
+    last_deployment_url: publishUrl ? normalizeDeploymentUrl(publishUrl) : null,
+    last_deployment_at: null,
   };
 
   await upsertProjectServiceConnection(projectId, 'vercel', serviceData as Record<string, unknown>);
@@ -343,81 +274,23 @@ export async function triggerVercelDeployment(projectId: string) {
     throw new VercelError('Vercel project ID missing', 400);
   }
 
-  const teamId = data.team_id ?? null;
-
-  const githubRepo = await getProjectGitHubRepo(projectId);
-  if (!githubRepo) {
-    throw new VercelError('GitHub repository not connected', 400);
-  }
-
-  const githubService = await getProjectService(projectId, 'github');
-  const githubData = githubService?.serviceData as Record<string, any> | undefined;
-  const repoBranch =
-    typeof githubData?.default_branch === 'string' && githubData.default_branch.length > 0
-      ? githubData.default_branch
-      : 'main';
-
-  // Note: GitHub push is handled separately by user action
-  // Removed circular dependency to pushProjectToGitHub
-
-  // Fetch GitHub repository details directly
-  const repoInfo = await getGithubRepositoryDetailsInternal(token, githubRepo.owner, githubRepo.repoName);
-  const ref = repoBranch || repoInfo.default_branch || 'main';
-  const projectIdentifier = data.project_id ?? data.project_name ?? null;
-  const fetchedDomain = projectIdentifier
-    ? await fetchProductionDomain(token, projectIdentifier, teamId)
-    : null;
-  const canonicalDomain =
-    fetchedDomain ||
-    (typeof data.project_name === 'string' && data.project_name.trim().length > 0
-      ? `${data.project_name}.vercel.app`
-      : `${repoInfo.name}.vercel.app`);
-
-  const deploymentPayload = {
-    project: data.project_id,
-    name: data.project_name ?? repoInfo.name,
-    target: 'production',
-    gitSource: {
-      type: 'github',
-      repoId: repoInfo.id,
-      ref,
-    },
-  };
-
-  if (!data.project_name) {
-    await updateProjectServiceData(projectId, 'vercel', {
-      project_name: repoInfo.name,
-    });
-  }
-
-  const { owner: repoOwner, repoName } = githubRepo;
-
-  const deployment = await vercelFetch<{
-    id: string;
-    url: string;
-    readyState: string;
-    inspectorUrl?: string;
-    createdAt?: number;
-  }>(
+  const deployment = await vercelFetch<any>(
     token,
-    '/v13/deployments',
+    `/services/${data.project_id}/deploys`,
     {
       method: 'POST',
-      teamId,
-      body: deploymentPayload,
+      body: { clearCache: true },
     },
   );
 
-  const deploymentUrl = normalizeDeploymentUrl(deployment?.url);
-  const resolvedDeploymentUrl = normalizeDeploymentUrl(fetchedDomain ?? deployment?.url ?? canonicalDomain);
-  const readyState = deployment?.readyState ?? 'QUEUED';
+  const deploymentUrl = normalizeDeploymentUrl(data.production_domain ?? data.last_deployment_url);
+  const readyState = deployment?.status ?? 'QUEUED';
 
   await updateProjectServiceData(projectId, 'vercel', {
-    github_repo: `${repoOwner}/${repoName}`,
     last_deployment_id: deployment?.id ?? null,
     last_deployment_status: readyState,
     last_deployment_url: deploymentUrl,
-    production_domain: canonicalDomain,
+    production_domain: data.production_domain ?? deploymentUrl,
     last_deployment_at: deployment?.createdAt
       ? new Date(deployment.createdAt).toISOString()
       : new Date().toISOString(),
@@ -426,9 +299,9 @@ export async function triggerVercelDeployment(projectId: string) {
   return {
     success: true,
     deploymentId: deployment?.id ?? null,
-    deploymentUrl: resolvedDeploymentUrl ?? deploymentUrl,
+    deploymentUrl,
     status: readyState,
-    productionDomain: canonicalDomain,
+    productionDomain: data.production_domain ?? deploymentUrl,
   };
 }
 
@@ -451,108 +324,52 @@ export async function getCurrentDeploymentStatus(projectId: string) {
     return createEmptyDeploymentResponse({ vercel_configured: false });
   }
 
-  const teamId = data.team_id ?? null;
-  const projectIdentifier = data.project_id ?? data.project_name ?? null;
-  const fetchedDomain = projectIdentifier
-    ? await fetchProductionDomain(token, projectIdentifier, teamId)
-    : null;
-  const preferredDomain = fetchedDomain || data.production_domain || null;
+  const preferredDomain = data.production_domain || null;
 
-  const buildResponse = (deployment?: {
-    id: string;
-    url: string;
-    readyState: string;
-    inspectorUrl?: string;
-    createdAt?: number;
-  }): DeploymentStatusResponse => {
-    const normalizedDeploymentUrl = normalizeDeploymentUrl(deployment?.url ?? data.last_deployment_url);
-    const deploymentUrl = normalizeDeploymentUrl(preferredDomain ?? normalizedDeploymentUrl);
-    const readyState = deployment?.readyState ?? data.last_deployment_status ?? null;
-    const deploymentId = deployment?.id ?? data.last_deployment_id ?? null;
-    const isActive = readyState === 'QUEUED' || readyState === 'BUILDING';
-
-    return {
-      has_deployment: Boolean(isActive && deploymentId),
-      status: readyState ?? null,
-      last_deployment_url: normalizedDeploymentUrl ?? null,
-      deployment_id: deploymentId ?? null,
-      inspector_url: deployment?.inspectorUrl ?? null,
-      deployment_url: deploymentUrl ?? null,
-      production_domain: preferredDomain ?? null,
-      vercel_configured: true,
-    };
-  };
-
-  if (data.last_deployment_id) {
-    try {
-      const deployment = await vercelFetch<{
-        id: string;
-        url: string;
-        readyState: string;
-        inspectorUrl?: string;
-        createdAt?: number;
-      }>(
-        token,
-        `/v13/deployments/${data.last_deployment_id}`,
-        {
-          method: 'GET',
-          teamId,
-        },
-      );
-
-      const deploymentUrl = normalizeDeploymentUrl(deployment?.url);
-      const readyState = deployment?.readyState ?? null;
-
-      await updateProjectServiceData(projectId, 'vercel', {
-        last_deployment_id: deployment?.id ?? data.last_deployment_id,
-        last_deployment_status: readyState,
-        last_deployment_url: deploymentUrl,
-        production_domain: preferredDomain ?? data.production_domain ?? null,
-        last_deployment_at: deployment?.createdAt
-          ? new Date(deployment.createdAt).toISOString()
-          : data.last_deployment_at ?? new Date().toISOString(),
-      });
-
-      return buildResponse(deployment);
-    } catch (error) {
-      if (!(error instanceof VercelError && error.status === 404)) {
-        throw error;
-      }
-      // Fall through to list deployments when the stored deployment id is no longer valid.
-    }
-  }
-
-  const deployments = await vercelFetch<VercelDeploymentsResponse>(
+  const deployments = await vercelFetch<any>(
     token,
-    `/v13/projects/${data.project_id}/deployments`,
+    `/services/${data.project_id}/deploys`,
     {
       method: 'GET',
-      teamId,
-      query: {
-        limit: '1',
-      },
+      query: { limit: '1' },
     },
   );
 
-  const latest = Array.isArray(deployments?.deployments) ? deployments.deployments[0] : undefined;
-  if (!latest) {
-    return createEmptyDeploymentResponse({
-      production_domain: preferredDomain ?? data.production_domain ?? null,
-    });
-  }
+  const latest =
+    (Array.isArray(deployments?.deploys) && deployments.deploys[0]) ||
+    (Array.isArray(deployments) && deployments[0]) ||
+    null;
 
-  const deploymentUrl = normalizeDeploymentUrl(latest.url);
-  const readyState = latest.readyState ?? null;
+  const status = latest?.status ?? data.last_deployment_status ?? null;
+  const deploymentId = latest?.id ?? data.last_deployment_id ?? null;
+  const deploymentUrl = normalizeDeploymentUrl(
+    preferredDomain ||
+      latest?.publishUrl ||
+      latest?.url ||
+      data.last_deployment_url,
+  );
+  const isActive =
+    typeof status === 'string' &&
+    ['queued', 'building', 'in_progress', 'deploying'].includes(status.toLowerCase());
 
   await updateProjectServiceData(projectId, 'vercel', {
-    last_deployment_id: latest.id ?? data.last_deployment_id ?? null,
-    last_deployment_status: readyState,
+    last_deployment_id: deploymentId,
+    last_deployment_status: status,
     last_deployment_url: deploymentUrl,
     production_domain: preferredDomain ?? data.production_domain ?? null,
-    last_deployment_at: latest.createdAt
+    last_deployment_at: latest?.createdAt
       ? new Date(latest.createdAt).toISOString()
       : data.last_deployment_at ?? new Date().toISOString(),
   });
 
-  return buildResponse(latest);
+  return {
+    has_deployment: Boolean(isActive && deploymentId),
+    status: status ?? null,
+    last_deployment_url: deploymentUrl ?? null,
+    deployment_id: deploymentId ?? null,
+    inspector_url: null,
+    deployment_url: deploymentUrl ?? null,
+    production_domain: preferredDomain ?? null,
+    vercel_configured: true,
+  };
 }

@@ -279,34 +279,32 @@ export async function pushProjectToGitHub(projectId: string) {
     const ownerFromEnv = process.env.GITHUB_OWNER?.trim();
     const user = await getGithubUser();
 
-    let cloneUrl: string | undefined = typeof data?.clone_url === 'string' ? data.clone_url : undefined;
-    let owner: string | undefined = typeof data?.owner === 'string' ? data.owner : undefined;
+    if (!repoFromEnv) {
+      throw new GitHubError('GITHUB_REPO is not configured', 400);
+    }
+
+    const owner = ownerFromEnv || user.login;
+    const repoName = repoFromEnv;
+
+    let cloneUrl: string | undefined =
+      (data?.clone_url && typeof data.clone_url === 'string' && data.clone_url.trim()) ||
+      `https://github.com/${owner}/${repoName}.git`;
+
+    // Detect default branch from service data or repo metadata (fallback main)
     let defaultBranch: string | undefined =
       typeof data?.default_branch === 'string' && data.default_branch.trim().length > 0
         ? data.default_branch
         : 'main';
-    let repoName: string | undefined =
-      typeof data?.repo_name === 'string' && data.repo_name.trim().length > 0
-        ? data.repo_name
-        : undefined;
 
-    // Always create/use a dedicated repo per project on the authenticated user's account
-    const normalizedRepoName = sanitizeRepoName(repoName ?? project.name ?? projectId, projectId);
-    owner = ownerFromEnv || owner || user.login;
-    repoName = normalizedRepoName;
-
-    cloneUrl = cloneUrl || `https://github.com/${owner}/${repoName}.git`;
-
-    // Ensure repository exists (create if missing when using env fallback)
+    // Ensure repository exists (create if missing when env repo is given)
     try {
-      if (owner && repoName) {
-        await getGithubRepositoryDetails(owner, repoName);
-      }
+      const repoInfo = await getGithubRepositoryDetails(owner, repoName);
+      defaultBranch = repoInfo.default_branch || defaultBranch || 'main';
+      cloneUrl = `https://github.com/${owner}/${repoName}.git`;
     } catch (repoCheckError) {
-      if (repoCheckError instanceof GitHubError && repoCheckError.status === 404 && repoName) {
+      if (repoCheckError instanceof GitHubError && repoCheckError.status === 404) {
         const created = await createRepository({ repoName });
         cloneUrl = created?.clone_url ?? cloneUrl;
-        owner = created?.owner?.login ?? owner ?? user.login;
         defaultBranch = created?.default_branch ?? defaultBranch ?? 'main';
       } else {
         throw repoCheckError;
@@ -315,8 +313,7 @@ export async function pushProjectToGitHub(projectId: string) {
 
     const repoPath = await ensureProjectRepository(projectId, project.repoPath);
     ensureGitRepository(repoPath);
-    // Push to main branch for dedicated per-project repo
-    const branchName = sanitizeBranchName(defaultBranch || 'main', projectId);
+    const branchName = sanitizeBranchName(`preview-${projectId}`, projectId);
     const authenticatedUrl = String(cloneUrl).replace('https://', `https://${owner}:${token}@`);
     const userName = user.name || user.login;
     const userEmail = user.email || `${user.login}@users.noreply.github.com`;
@@ -335,6 +332,7 @@ export async function pushProjectToGitHub(projectId: string) {
       last_pushed_at: new Date().toISOString(),
       last_pushed_branch: branchName,
       default_branch: defaultBranch,
+      preview_branch: branchName,
       repo_name: repoName,
       owner,
       clone_url: cloneUrl,
