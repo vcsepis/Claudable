@@ -1,7 +1,6 @@
 import { getPlainServiceToken } from '@/lib/services/tokens';
 import { upsertProjectServiceConnection, updateProjectServiceData, getProjectService } from '@/lib/services/project-services';
 import { getProjectById } from '@/lib/services/project';
-import { listEnvVars } from '@/lib/services/env';
 import { validateProjectExists, getProjectGitHubRepo } from '@/lib/services/service-integration';
 import type {
   CheckResult,
@@ -11,7 +10,7 @@ import type {
   DeploymentStatusResponse,
 } from '@/types/shared';
 
-const RENDER_API_BASE = 'https://api.render.com/v1';
+const RAILWAY_GQL = 'https://backboard.railway.app/graphql/v2';
 
 class VercelError extends Error {
   constructor(message: string, readonly status?: number) {
@@ -20,54 +19,31 @@ class VercelError extends Error {
   }
 }
 
-async function vercelFetch<T = any>(
-  token: string,
-  endpoint: string,
-  {
-    method = 'GET',
-    body,
-    query,
-  }: {
-    method?: string;
-    body?: any;
-    query?: Record<string, string | undefined>;
-  } = {},
-): Promise<T> {
-  const url = new URL(`${RENDER_API_BASE}${endpoint}`);
-  if (query) {
-    Object.entries(query).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        url.searchParams.set(key, value);
-      }
-    });
-  }
-
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-  };
-
-  let resolvedBody: BodyInit | undefined;
-  if (body !== undefined && body !== null) {
-    headers['Content-Type'] = 'application/json';
-    resolvedBody = JSON.stringify(body);
-  }
-
-  const response = await fetch(url.toString(), {
-    method,
-    headers,
-    body: resolvedBody,
+async function railwayFetch<T = any>(token: string, query: string, variables?: Record<string, any>): Promise<T> {
+  const response = await fetch(RAILWAY_GQL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ query, variables }),
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new VercelError(errorText || `Render API request failed (${response.status})`, response.status);
+  const text = await response.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new VercelError(text || `Railway API request failed (${response.status})`, response.status);
   }
 
-  if (response.status === 204) {
-    return null as T;
+  if (!response.ok || json.errors) {
+    const msg = json?.errors?.map((e: any) => e?.message).join('; ') || JSON.stringify(json);
+    throw new VercelError(msg || `Railway API request failed (${response.status})`, response.status);
   }
 
-  return (await response.json()) as T;
+  return json.data as T;
 }
 
 function normalizeDeploymentUrl(url?: string | null): string | null {
@@ -188,7 +164,7 @@ export async function connectVercelProject(
 ) {
   const token = await getPlainServiceToken('vercel');
   if (!token) {
-    throw new VercelError('Vercel token not configured', 401);
+    throw new VercelError('Railway token not configured', 401);
   }
 
   const project = await getProjectById(projectId);
@@ -210,43 +186,74 @@ export async function connectVercelProject(
       ? githubData.default_branch
       : 'main';
 
-  const repoUrl = `https://github.com/${githubRepoInfo.owner}/${githubRepoInfo.repoName}`;
-  const ownerId = process.env.RENDER_OWNER || undefined;
-  const buildCommand = process.env.RENDER_BUILD_COMMAND || 'npm install && npm run build';
-  const publishPath = process.env.RENDER_PUBLISH_PATH || 'out';
-  const rootDir = process.env.RENDER_ROOT_DIR || '';
+  const repoSlug = `${githubRepoInfo.owner}/${githubRepoInfo.repoName}`;
+  const workspaceId = process.env.RAILWAY_WORKSPACE_ID || undefined;
+  const railwayProjectId =
+    process.env.RAILWAY_PROJECT_ID ||
+    (await (async () => {
+      const projectCreateMutation = `
+        mutation ProjectCreate($name: String!, $workspaceId: String) {
+          projectCreate(name: $name, workspaceId: $workspaceId) {
+            id
+            name
+          }
+        }
+      `;
+      const projectResp = await railwayFetch<{ projectCreate: any }>(token, projectCreateMutation, {
+        name: projectName,
+        workspaceId: workspaceId || null,
+      });
+      return projectResp?.projectCreate?.id ?? null;
+    })());
 
-  const payload: Record<string, unknown> = {
+  if (!railwayProjectId) {
+    throw new VercelError('Failed to create or resolve Railway project', 500);
+  }
+
+  // Step 2: create service from GitHub repo/branch
+  const serviceCreateMutation = `
+    mutation CreateService($input: ServiceCreateInput!) {
+      serviceCreate(input: $input) {
+        id
+        name
+        url
+        domains { name }
+        project { id name }
+      }
+    }
+  `;
+
+  const input: Record<string, any> = {
+    projectId: railwayProjectId,
     name: projectName,
-    ownerId,
-    serviceDetails: {
-      type: 'static_site',
-      repo: repoUrl,
+    source: {
+      repo: repoSlug,
       branch,
-      buildCommand,
-      publishPath,
-      rootDir,
     },
   };
 
-  const service = await vercelFetch<any>(token, '/services', {
-    method: 'POST',
-    body: payload,
+  const serviceResp = await railwayFetch<{ serviceCreate: any }>(token, serviceCreateMutation, {
+    input,
   });
 
+  const service = serviceResp?.serviceCreate;
+  const serviceId = service?.id ?? null;
+  if (!serviceId) {
+    throw new VercelError('Failed to create Railway service (missing id)', 500);
+  }
+
   const publishUrl =
-    service?.serviceDetails?.staticSite?.publishUrl ||
-    service?.serviceDetails?.staticSite?.url ||
-    service?.serviceDetails?.url ||
+    service?.domains?.[0]?.name ||
+    service?.url ||
     null;
 
   const serviceData: VercelProjectServiceData = {
-    project_id: service?.id ?? null,
+    project_id: serviceId,
     project_name: service?.name ?? projectName,
-    project_url: service?.dashboardUrl ?? null,
+    project_url: service?.url ?? null,
     github_repo: `${githubRepoInfo.owner}/${githubRepoInfo.repoName}`,
-    team_id: ownerId ?? null,
-    production_domain: publishUrl ?? null,
+    team_id: null,
+    production_domain: publishUrl ? (publishUrl.startsWith('http') ? publishUrl : `https://${publishUrl}`) : null,
     connected_at: new Date().toISOString(),
     last_deployment_id: null,
     last_deployment_status: null,
@@ -261,27 +268,35 @@ export async function connectVercelProject(
 export async function triggerVercelDeployment(projectId: string) {
   const token = await getPlainServiceToken('vercel');
   if (!token) {
-    throw new VercelError('Vercel token not configured', 401);
+    throw new VercelError('Railway token not configured', 401);
   }
 
   const service = await getProjectService(projectId, 'vercel');
   if (!service) {
-    throw new VercelError('Vercel project not connected', 404);
+    throw new VercelError('Railway service not connected', 404);
   }
 
   const data = (service.serviceData ?? {}) as VercelProjectServiceData;
   if (!data.project_id) {
-    throw new VercelError('Vercel project ID missing', 400);
+    throw new VercelError('Railway service ID missing', 400);
   }
 
-  const deployment = await vercelFetch<any>(
-    token,
-    `/services/${data.project_id}/deploys`,
-    {
-      method: 'POST',
-      body: { clearCache: true },
-    },
-  );
+  // Railway auto-deploys on push; explicitly request a new deployment if supported
+  const deployMutation = `
+    mutation TriggerDeploy($serviceId: String!) {
+      deploymentCreate(input: { serviceId: $serviceId }) {
+        id
+        status
+        url
+      }
+    }
+  `;
+
+  const deployResp = await railwayFetch<{ deploymentCreate: any }>(token, deployMutation, {
+    serviceId: data.project_id,
+  });
+
+  const deployment = deployResp?.deploymentCreate ?? null;
 
   const deploymentUrl = normalizeDeploymentUrl(data.production_domain ?? data.last_deployment_url);
   const readyState = deployment?.status ?? 'QUEUED';
@@ -326,25 +341,36 @@ export async function getCurrentDeploymentStatus(projectId: string) {
 
   const preferredDomain = data.production_domain || null;
 
-  const deployments = await vercelFetch<any>(
-    token,
-    `/services/${data.project_id}/deploys`,
-    {
-      method: 'GET',
-      query: { limit: '1' },
-    },
-  );
+  const statusQuery = `
+    query ServiceStatus($id: String!) {
+      service(id: $id) {
+        id
+        name
+        url
+        domains { name }
+        deployments(first: 1) {
+          edges {
+            node {
+              id
+              status
+              url
+              updatedAt
+            }
+          }
+        }
+      }
+    }
+  `;
 
-  const latest =
-    (Array.isArray(deployments?.deploys) && deployments.deploys[0]) ||
-    (Array.isArray(deployments) && deployments[0]) ||
-    null;
-
+  const resp = await railwayFetch<any>(token, statusQuery, { id: data.project_id });
+  const serviceData = resp?.service;
+  const latest = serviceData?.deployments?.edges?.[0]?.node ?? null;
   const status = latest?.status ?? data.last_deployment_status ?? null;
   const deploymentId = latest?.id ?? data.last_deployment_id ?? null;
+  const serviceUrl = serviceData?.url || serviceData?.domains?.[0]?.name || null;
   const deploymentUrl = normalizeDeploymentUrl(
     preferredDomain ||
-      latest?.publishUrl ||
+      serviceUrl ||
       latest?.url ||
       data.last_deployment_url,
   );
@@ -356,9 +382,9 @@ export async function getCurrentDeploymentStatus(projectId: string) {
     last_deployment_id: deploymentId,
     last_deployment_status: status,
     last_deployment_url: deploymentUrl,
-    production_domain: preferredDomain ?? data.production_domain ?? null,
-    last_deployment_at: latest?.createdAt
-      ? new Date(latest.createdAt).toISOString()
+    production_domain: preferredDomain || (serviceUrl ? normalizeDeploymentUrl(serviceUrl) : null),
+    last_deployment_at: latest?.updatedAt
+      ? new Date(latest.updatedAt).toISOString()
       : data.last_deployment_at ?? new Date().toISOString(),
   });
 
@@ -369,7 +395,7 @@ export async function getCurrentDeploymentStatus(projectId: string) {
     deployment_id: deploymentId ?? null,
     inspector_url: null,
     deployment_url: deploymentUrl ?? null,
-    production_domain: preferredDomain ?? null,
+    production_domain: preferredDomain || (serviceUrl ? normalizeDeploymentUrl(serviceUrl) : null),
     vercel_configured: true,
   };
 }

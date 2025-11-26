@@ -35,6 +35,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 const MONMI_LOGO_URL = 'https://monmi.au/assets/monmi-logo-qBVbzZlt.jpg';
 
 const assistantBrandColors = ACTIVE_CLI_BRAND_COLORS;
+const DEFAULT_CREDIT_CAP = 1200;
 
 const CLI_LABELS = ACTIVE_CLI_NAME_MAP;
 
@@ -288,6 +289,7 @@ export default function ChatPage() {
   const lineNumberRef = useRef<HTMLDivElement>(null);
   const editedContentRef = useRef<string>('');
   const [isFileUpdating, setIsFileUpdating] = useState(false);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
   const isDeepThinkingSupported = useMemo(
     () => preferredCli === 'claude' && (selectedModel?.includes('sonnet-4-5') ?? false),
     [preferredCli, selectedModel],
@@ -303,6 +305,10 @@ export default function ChatPage() {
     })),
     [cliStatuses]
   );
+  const effectiveCredits = creditBalance ?? 0;
+  const creditCap = Math.max(DEFAULT_CREDIT_CAP, effectiveCredits);
+  const creditPercent =
+    creditCap > 0 ? Math.min(100, Math.max(0, (effectiveCredits / creditCap) * 100)) : 0;
 
   const updatePreferredCli = useCallback((cli: string) => {
     const sanitized = sanitizeCli(cli);
@@ -320,6 +326,10 @@ export default function ChatPage() {
       sessionStorage.setItem('selectedModel', sanitized);
     }
   }, [preferredCli]);
+
+  const handleTopUp = useCallback(() => {
+    setShowTopUpModal(true);
+  }, []);
 
   useEffect(() => {
     previewUrlRef.current = previewUrl;
@@ -2403,7 +2413,7 @@ const persistProjectPreferences = useCallback(
             className="h-full border-r border-gray-200 flex flex-col"
           >
             {/* Chat header */}
-            <div className="bg-white border-b border-gray-200 p-4 h-[73px] flex items-center justify-between gap-3">
+            <div className="bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-3 sticky top-0 z-20 shadow-sm">
               <div className="flex items-center gap-3">
                 <button 
                   onClick={() => router.push('/')}
@@ -2423,21 +2433,43 @@ const persistProjectPreferences = useCallback(
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {creditError && (
-                  <span className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-2 py-1">
-                    {creditError}
-                  </span>
-                )}
-                <div
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border ${
-                    creditBalance !== null && creditBalance <= 50
-                      ? 'bg-amber-50 text-amber-700 border-amber-200'
-                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  } ${creditLoading ? 'animate-pulse' : ''}`}
-                  title="Remaining project credits"
-                >
-                  {creditLoading ? 'Credits: …' : `Credits: ${creditBalance ?? '—'}`}
+              <div className="flex items-center gap-3">
+                <div className="min-w-[240px] rounded-2xl bg-gradient-to-br from-[#f9f6f0] via-white to-[#f3eee5] border border-gray-200 shadow-sm p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-semibold text-gray-500">Credits</span>
+                      <span className="text-xs text-gray-500">Remaining</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-gray-900">
+                        {creditLoading
+                          ? 'Loading…'
+                          : `${effectiveCredits.toLocaleString(undefined, { maximumFractionDigits: 1 })} left`}
+                      </div>
+                      <button
+                        onClick={handleTopUp}
+                        className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-600 text-white text-[11px] font-semibold px-3 py-1 hover:bg-blue-700 transition-colors"
+                      >
+                        Top up
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 h-2.5 w-full rounded-full bg-blue-100 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${creditLoading ? 'animate-pulse bg-blue-300' : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500'}`}
+                      style={{ width: `${creditPercent}%` }}
+                      aria-label="Credit usage"
+                    />
+                  </div>
+                  <div className="mt-3 flex items-center gap-2 text-[12px] text-blue-800">
+                    <span className="h-2 w-2 rounded-full bg-blue-600" />
+                    <span>Using monthly credits</span>
+                  </div>
+                  {creditError && (
+                    <p className="mt-2 text-[11px] text-red-600 bg-red-50 border border-red-100 rounded-lg px-2 py-1">
+                      {creditError}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -3459,6 +3491,101 @@ const persistProjectPreferences = useCallback(
           setProjectDescription(description ?? '');
         }}
       />
+
+      {/* Top-up Modal */}
+      {showTopUpModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowTopUpModal(false)} />
+          <div className="relative w-full max-w-5xl bg-white border border-gray-200 rounded-3xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white/90 backdrop-blur">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Top up credits</p>
+                <h3 className="text-xl font-semibold text-gray-900">Choose a plan that fits you</h3>
+              </div>
+              <button
+                onClick={() => setShowTopUpModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors"
+                aria-label="Close top up"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-6 bg-gradient-to-br from-[#fdfaf5] via-white to-[#f2ede4]">
+              {[
+                {
+                  title: 'Pro',
+                  description: 'Designed for fast-moving teams building together in real time.',
+                  price: '$480',
+                  cta: 'Upgrade current plan',
+                  badge: 'Popular',
+                },
+                {
+                  title: 'Business',
+                  description: 'Advanced controls and power features for growing departments.',
+                  price: '$588',
+                  cta: 'Upgrade',
+                },
+                {
+                  title: 'Enterprise',
+                  description: 'Built for large orgs needing flexibility, scale, and governance.',
+                  price: 'Custom',
+                  cta: 'Book a demo',
+                  muted: true,
+                },
+              ].map((plan) => (
+                <div
+                  key={plan.title}
+                  className={`rounded-3xl border ${
+                    plan.muted ? 'border-gray-200 bg-white/70' : 'border-gray-200 bg-white'
+                  } shadow-sm p-6 flex flex-col gap-4`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="text-lg font-semibold text-gray-900">{plan.title}</h4>
+                      <p className="text-sm text-gray-600 mt-1">{plan.description}</p>
+                    </div>
+                    {plan.badge && (
+                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700">
+                        {plan.badge}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-3xl font-bold text-gray-900 flex items-baseline gap-2">
+                    {plan.price}
+                    {!plan.muted && <span className="text-sm font-medium text-gray-500">per month</span>}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {plan.muted ? 'Flexible plans' : 'Shared across unlimited users'}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <span className="inline-flex h-5 w-9 items-center rounded-full bg-gray-200 px-1">
+                        <span className="h-3.5 w-3.5 rounded-full bg-white shadow" />
+                      </span>
+                      Annual
+                    </label>
+                  </div>
+                  <button
+                    className={`mt-auto w-full rounded-xl border text-sm font-semibold py-3 transition-colors ${
+                      plan.muted
+                        ? 'bg-[#f7f3ec] text-gray-800 hover:bg-[#efe8dc]'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700 border-indigo-600'
+                    }`}
+                    onClick={() => {
+                      // Placeholder: hook into your checkout/top-up flow
+                      alert(`Selected ${plan.title} plan`);
+                    }}
+                  >
+                    {plan.cta}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

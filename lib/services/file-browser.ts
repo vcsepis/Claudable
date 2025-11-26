@@ -6,7 +6,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { getProjectById } from '@/lib/services/project';
 import { pushProjectToGitHub } from '@/lib/services/github';
-import { triggerVercelDeployment } from '@/lib/services/vercel';
+import { triggerVercelDeployment, connectVercelProject } from '@/lib/services/vercel';
+import { getProjectService } from '@/lib/services/project-services';
 import type { ProjectFileEntry } from '@/types/backend';
 import type { Project } from '@/types/backend';
 
@@ -276,9 +277,14 @@ export async function writeAndPushProjectFileContent(
 ) {
   await writeProjectFileContent(projectId, filePath, content);
   try {
-    await pushProjectToGitHub(projectId);
-    // Best-effort deploy to Render (reusing the "vercel" deploy helper)
+    const commitMsg = `Auto-commit from agent: ${filePath}`;
+    await pushProjectToGitHub(projectId, commitMsg);
+    // Best-effort connect + deploy to Render (reusing the "vercel" helpers)
     try {
+      const existing = await getProjectService(projectId, 'vercel');
+      if (!existing) {
+        await connectVercelProject(projectId, `render-${projectId}`);
+      }
       await triggerVercelDeployment(projectId);
     } catch (deployError) {
       // Swallow deploy errors so file save/push still succeed; surface via logs only

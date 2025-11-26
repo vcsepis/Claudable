@@ -96,6 +96,8 @@ export async function getPlainServiceToken(provider: string): Promise<string | n
   }
   if (provider === 'vercel') {
     const envToken =
+      process.env.RAILWAY_TOKEN ||
+      (process.env as any).railway_TOKEN ||
       process.env.RENDER_TOKEN ||
       (process.env as any).render_TOKEN ||
       process.env.VERCEL_TOKEN ||

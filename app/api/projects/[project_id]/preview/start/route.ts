@@ -27,21 +27,30 @@ export async function POST(
       );
     }
 
-    // Deduct small preview credit charge (preview category, medium complexity)
-    const previewCost = costForCategory('preview', 'medium');
-    try {
-      await deductUserCredits(
-        project.userId,
-        previewCost,
-        'preview:start',
-        project_id,
-        { preview: true }
-      );
-    } catch (creditError) {
-      const message =
-        creditError instanceof Error ? creditError.message : 'Failed to deduct credits';
-      const status = message.toLowerCase().includes('insufficient') ? 402 : 400;
-      return NextResponse.json({ success: false, error: message }, { status });
+    const skipCredits =
+      process.env.DISABLE_PREVIEW_CREDITS === '1' ||
+      process.env.SKIP_PREVIEW_CREDITS === '1' ||
+      process.env.NODE_ENV !== 'production';
+
+    if (!skipCredits) {
+      // Deduct small preview credit charge (preview category, medium complexity)
+      const previewCost = costForCategory('preview', 'medium');
+      try {
+        await deductUserCredits(
+          project.userId,
+          previewCost,
+          'preview:start',
+          project_id,
+          { preview: true }
+        );
+      } catch (creditError) {
+        const message =
+          creditError instanceof Error ? creditError.message : 'Failed to deduct credits';
+        const status = message.toLowerCase().includes('insufficient') ? 402 : 400;
+        return NextResponse.json({ success: false, error: message }, { status });
+      }
+    } else {
+      console.log(`[API] Skipping preview credit deduction for project ${project_id}`);
     }
 
     const preview = await previewManager.start(project_id);

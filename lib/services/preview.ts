@@ -31,6 +31,13 @@ const LOG_LIMIT = PREVIEW_CONFIG.LOG_LIMIT;
 const PREVIEW_FALLBACK_PORT_START = PREVIEW_CONFIG.FALLBACK_PORT_START;
 const PREVIEW_FALLBACK_PORT_END = PREVIEW_CONFIG.FALLBACK_PORT_END;
 const PREVIEW_MAX_PORT = 65_535;
+const PREVIEW_MIN_PORT_SPAN = (() => {
+  const raw = Number.parseInt(process.env.PREVIEW_MIN_PORT_SPAN || '', 10);
+  if (Number.isInteger(raw) && raw > 0) {
+    return Math.min(raw, 500); // cap to keep ranges reasonable
+  }
+  return 10;
+})();
 const ROOT_ALLOWED_FILES = new Set([
   '.DS_Store',
   '.editorconfig',
@@ -114,6 +121,20 @@ function parsePort(value?: string): number | null {
   const numeric = Number.parseInt(stripQuotes(value), 10);
   if (Number.isFinite(numeric) && numeric > 0 && numeric <= 65535) {
     return numeric;
+  }
+  return null;
+}
+
+function parsePortFromUrl(url?: string | null): number | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.port) {
+      const p = parsePort(parsed.port);
+      return p;
+    }
+  } catch {
+    return null;
   }
   return null;
 }
@@ -226,6 +247,11 @@ function resolvePreviewBounds(): { start: number; end: number } {
 
   if (end < start) {
     end = Math.min(start + (PREVIEW_FALLBACK_PORT_END - PREVIEW_FALLBACK_PORT_START), PREVIEW_MAX_PORT);
+  }
+
+  // Ensure we always have a usable window (helps when start === end and that port is busy)
+  if (end - start + 1 < PREVIEW_MIN_PORT_SPAN) {
+    end = Math.min(start + PREVIEW_MIN_PORT_SPAN - 1, PREVIEW_MAX_PORT);
   }
 
   return { start, end };
@@ -637,11 +663,11 @@ class PreviewManager {
       throw new Error('Project not found');
     }
 
-    const projectPath = project.repoPath
-      ? path.resolve(project.repoPath)
-      : path.join(process.cwd(), 'projects', projectId);
+  const projectPath = project.repoPath
+    ? path.resolve(project.repoPath)
+    : path.join(process.cwd(), 'projects', projectId);
 
-    await fs.mkdir(projectPath, { recursive: true });
+  await fs.mkdir(projectPath, { recursive: true });
 
     const logs: string[] = [];
     const record = (message: string) => {
@@ -743,9 +769,17 @@ class PreviewManager {
     }
 
     const previewBounds = resolvePreviewBounds();
+    const envFixedUrl = process.env.PREVIEW_PUBLIC_URL?.trim() || null;
+    const envFixedPort = parsePortFromUrl(envFixedUrl);
+
+    const preferPort =
+      envFixedPort && envFixedPort >= previewBounds.start && envFixedPort <= previewBounds.end
+        ? envFixedPort
+        : null;
+
     let preferredPort: number;
     try {
-      preferredPort = await findAvailablePort(previewBounds.start, previewBounds.end);
+      preferredPort = preferPort ?? (await findAvailablePort(previewBounds.start, previewBounds.end));
     } catch (error) {
       // If the requested range is exhausted (e.g., single port already in use), fall back to default preview range
       const fallbackStart = PREVIEW_FALLBACK_PORT_START;
@@ -757,7 +791,7 @@ class PreviewManager {
       preferredPort = await findAvailablePort(fallbackStart, fallbackEnd);
     }
 
-    const initialUrl = `http://localhost:${preferredPort}`;
+    const initialUrl = envFixedUrl && envFixedPort ? envFixedUrl.replace(/\/+$/, '') : `http://localhost:${preferredPort}`;
 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -873,8 +907,13 @@ class PreviewManager {
 
     const effectivePort = previewProcess.port;
     let resolvedUrl: string = `http://localhost:${effectivePort}`;
-    if (typeof overrides.url === 'string' && overrides.url.trim().length > 0) {
+    if (envFixedUrl) {
+      resolvedUrl = resolveExposedPreviewUrl(envFixedUrl, effectivePort);
+    } else if (typeof overrides.url === 'string' && overrides.url.trim().length > 0) {
       resolvedUrl = overrides.url.trim();
+      resolvedUrl = resolveExposedPreviewUrl(resolvedUrl, effectivePort);
+    } else {
+      resolvedUrl = resolveExposedPreviewUrl(resolvedUrl, effectivePort);
     }
 
     env.NEXT_PUBLIC_APP_URL = resolvedUrl;

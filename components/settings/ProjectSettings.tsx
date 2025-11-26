@@ -1,9 +1,11 @@
+/* eslint-disable react-hooks/rules-of-hooks */
+'use client';
 /**
  * Project Settings Component (Refactored)
  * Main settings modal with tabs
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { FaCog, FaRobot, FaLock, FaPlug, FaUser } from 'react-icons/fa';
+import { FaCog, FaRobot, FaLock, FaPlug } from 'react-icons/fa';
 import { SettingsModal } from './SettingsModal';
 import { GeneralSettings } from './GeneralSettings';
 import { AIAssistantSettings } from './AIAssistantSettings';
@@ -39,13 +41,20 @@ export function ProjectSettings({
   const [creditLoading, setCreditLoading] = useState(false);
   const [creditError, setCreditError] = useState<string | null>(null);
 
+  const UserIcon = (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 22c0-3.866 3.582-7 8-7s8 3.134 8 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+
   const tabs = useMemo(
     () =>
       [
         {
           id: 'profile' as SettingsTab,
           label: 'Profile',
-          icon: <span className="w-4 h-4 inline-flex"><FaUser /></span>,
+          icon: <span className="w-4 h-4 inline-flex">{UserIcon}</span>,
         },
         {
           id: 'general' as SettingsTab,

@@ -259,7 +259,7 @@ export async function connectProjectToGitHub(projectId: string, options: CreateR
   };
 }
 
-export async function pushProjectToGitHub(projectId: string) {
+export async function pushProjectToGitHub(projectId: string, commitMessage?: string) {
   try {
     const project = await getProjectById(projectId);
     if (!project) {
@@ -320,7 +320,7 @@ export async function pushProjectToGitHub(projectId: string) {
     ensureGitConfig(repoPath, userName, userEmail);
     addOrUpdateRemote(repoPath, 'origin', authenticatedUrl);
     checkoutOrCreateBranch(repoPath, branchName);
-    const committed = commitAll(repoPath, `Update from monmi (${branchName})`);
+    const committed = commitAll(repoPath, commitMessage || `Update from monmi (${branchName})`);
     if (!committed) {
       // Ensure branch exists remotely even if there are no new changes
       ensureInitialCommit(repoPath, 'chore: ensure main branch exists');
