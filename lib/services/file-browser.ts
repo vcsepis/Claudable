@@ -6,6 +6,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { getProjectById } from '@/lib/services/project';
 import { pushProjectToGitHub } from '@/lib/services/github';
+import { triggerVercelDeployment } from '@/lib/services/vercel';
 import type { ProjectFileEntry } from '@/types/backend';
 import type { Project } from '@/types/backend';
 
@@ -276,6 +277,13 @@ export async function writeAndPushProjectFileContent(
   await writeProjectFileContent(projectId, filePath, content);
   try {
     await pushProjectToGitHub(projectId);
+    // Best-effort deploy to Render (reusing the "vercel" deploy helper)
+    try {
+      await triggerVercelDeployment(projectId);
+    } catch (deployError) {
+      // Swallow deploy errors so file save/push still succeed; surface via logs only
+      console.warn('[FileBrowser] Render deploy skipped:', deployError);
+    }
   } catch (error) {
     // Surface a clear, user-facing error so the UI can warn that GitHub sync failed
     const message =
