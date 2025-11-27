@@ -4,7 +4,7 @@ import { AnimatePresence } from 'framer-motion';
 import { MotionDiv, MotionH3, MotionP, MotionButton } from '@/lib/motion';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { FaCode, FaDesktop, FaMobileAlt, FaPlay, FaStop, FaSync, FaCog, FaRocket, FaFolder, FaFolderOpen, FaFile, FaFileCode, FaCss3Alt, FaHtml5, FaJs, FaReact, FaPython, FaDocker, FaGitAlt, FaMarkdown, FaDatabase, FaPhp, FaJava, FaRust, FaVuejs, FaLock, FaHome, FaChevronUp, FaChevronRight, FaChevronDown, FaArrowLeft, FaArrowRight, FaRedo } from 'react-icons/fa';
+import { FaCode, FaDesktop, FaMobileAlt, FaPlay, FaStop, FaSync, FaCog, FaRocket, FaFolder, FaFolderOpen, FaFile, FaFileCode, FaCss3Alt, FaHtml5, FaJs, FaReact, FaPython, FaDocker, FaGitAlt, FaMarkdown, FaDatabase, FaPhp, FaJava, FaRust, FaVuejs, FaLock, FaHome, FaChevronUp, FaChevronRight, FaChevronDown, FaArrowLeft, FaArrowRight, FaRedo, FaExternalLinkAlt } from 'react-icons/fa';
 import { SiTypescript, SiGo, SiRuby, SiSvelte, SiJson, SiYaml, SiCplusplus } from 'react-icons/si';
 import { VscJson } from 'react-icons/vsc';
 import ChatLog from '@/components/chat/ChatLog';
@@ -309,6 +309,12 @@ export default function ChatPage() {
   const creditCap = Math.max(DEFAULT_CREDIT_CAP, effectiveCredits);
   const creditPercent =
     creditCap > 0 ? Math.min(100, Math.max(0, (effectiveCredits / creditCap) * 100)) : 0;
+  const previewAppPath = useMemo(() => {
+    if (!projectId) return '#';
+    const routeParam =
+      currentRoute && currentRoute !== '/' ? `?route=${encodeURIComponent(currentRoute)}` : '';
+    return `/${projectId}${routeParam}`;
+  }, [projectId, currentRoute]);
 
   const updatePreferredCli = useCallback((cli: string) => {
     const sanitized = sanitizeCli(cli);
@@ -2663,6 +2669,17 @@ const persistProjectPreferences = useCallback(
                           </button>
                         </div>
                       </div>
+
+                      <a
+                        href={previewAppPath}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="h-9 flex items-center gap-2 px-3 rounded-lg border border-gray-200 bg-white text-gray-800 text-sm font-medium hover:bg-gray-50 transition-colors"
+                        title={`Open /${projectId} preview in a new window`}
+                      >
+                        <FaExternalLinkAlt size={12} />
+                        <span className="hidden md:inline">/{projectId}</span>
+                      </a>
                     </div>
                   )}
                 </div>

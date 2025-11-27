@@ -25,7 +25,9 @@
     "prisma:reset": "prisma migrate reset",
     "setup": "npm install && prisma generate && prisma db push",
     "check-cli": "node scripts/check-claude-cli.js",
-    "postinstall": "npm run ensure:env"
+    "postinstall": "npm run ensure:env",
+    "web": "SKIP_DB_SYNC=1 NODE_ENV=production node scripts/run-web.js --port 3006",
+    "preview": "node scripts/run-web.js --port 3100"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.22",
