@@ -3354,7 +3354,7 @@ const persistProjectPreferences = useCallback(
                 </div>
                 <div>
                   <h3 className="text-base font-semibold text-gray-900 ">Publish Project</h3>
-                  <p className="text-xs text-gray-600 ">Deploy with Vercel, linked to your GitHub repo</p>
+                  <p className="text-xs text-gray-600 ">Deploy with Render, linked to your GitHub repo</p>
                 </div>
               </div>
               <button onClick={() => setShowPublishPanel(false)} className="text-gray-400 hover:text-gray-600 ">
@@ -3401,7 +3401,7 @@ const persistProjectPreferences = useCallback(
                   <p className="text-sm font-medium text-gray-900 mb-2">Connect the following services:</p>
                   <div className="space-y-1 text-amber-700 text-sm">
                     {!githubConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>GitHub repository not connected</div>)}
-                    {!vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Vercel project not connected</div>)}
+                    {!vercelConnected && (<div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"/>Render service not connected</div>)}
                   </div>
                   <button
                     className="mt-3 w-full px-4 py-2 rounded-xl border border-gray-200 text-gray-800 hover:bg-gray-50 "
@@ -3432,7 +3432,7 @@ const persistProjectPreferences = useCallback(
                     }
                     // Small grace period to let GitHub update default branch
                     await new Promise(r => setTimeout(r, 800));
-                    // 2) Deploy to Vercel (branch auto-resolved on server)
+                    // 2) Deploy to Render (branch auto-resolved on server)
                     const deployUrl = `${API_BASE}/api/projects/${projectId}/vercel/deploy`;
                     const vercelRes = await fetch(deployUrl, {
                       method: 'POST',
