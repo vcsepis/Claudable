@@ -12,17 +12,30 @@ const path = require('path');
 const os = require('os');
 
 const isWindows = os.platform() === 'win32';
-const args = process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+const passthrough = [];
+
+let allowPreviewPort = false;
+
+for (let i = 0; i < rawArgs.length; i += 1) {
+  const arg = rawArgs[i];
+  if (arg === '--allow-preview-port' || arg === '--allow-preview-range') {
+    allowPreviewPort = true;
+    continue;
+  }
+  passthrough.push(arg);
+}
 
 const env = {
   ...process.env,
   SKIP_DB_SYNC: process.env.SKIP_DB_SYNC || '1',
   NODE_ENV: process.env.NODE_ENV || 'production',
+  ALLOW_PREVIEW_PORT: allowPreviewPort ? '1' : process.env.ALLOW_PREVIEW_PORT,
 };
 
 const child = spawn(
   'node',
-  [path.join(__dirname, 'run-web.js'), ...args],
+  [path.join(__dirname, 'run-web.js'), ...passthrough],
   {
     cwd: path.join(__dirname, '..'),
     stdio: 'inherit',

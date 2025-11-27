@@ -27,7 +27,7 @@
     "check-cli": "node scripts/check-claude-cli.js",
     "postinstall": "npm run ensure:env",
     "web": "node scripts/web-start.js --port 3006",
-    "preview": "node scripts/run-web.js --port 3100"
+    "preview": "node scripts/web-start.js --port 3100 --allow-preview-port"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.22",

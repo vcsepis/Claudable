@@ -180,6 +180,10 @@ async function ensureEnvironment(options = {}) {
   console.log('🔧 Setting up development environment...');
 
   const { preferredPort: preferredOverride } = options ?? {};
+  const allowPreviewRange =
+    options && Object.prototype.hasOwnProperty.call(options, 'allowPreviewRange')
+      ? Boolean(options.allowPreviewRange)
+      : false;
 
   let envContents = readFileSafe(envFile);
   const envLocalContentsRaw = readFileSafe(envLocalFile);
@@ -231,7 +235,7 @@ async function ensureEnvironment(options = {}) {
 
   const sanitizeWebCandidate = (val) => {
     if (val === null || val === undefined) return null;
-    if (val >= portRangeStart && val <= portRangeEnd) return null;
+    if (!allowPreviewRange && val >= portRangeStart && val <= portRangeEnd) return null;
     if (val < DEFAULT_WEB_PORT || val > DEFAULT_WEB_MAX) {
       return DEFAULT_WEB_PORT;
     }
