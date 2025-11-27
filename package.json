@@ -10,7 +10,7 @@
     "dev:desktop": "node scripts/run-desktop.js",
     "dev:electron": "npm run dev:desktop",
     "ensure:env": "node scripts/setup-env.js",
-    "build": "next build",
+    "build": "next build --webpack",
     "build:desktop": "npm run build && electron-builder",
     "package:mac": "npm run build && electron-builder --mac",
     "package:win": "npm run build && electron-builder --win",
