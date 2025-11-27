@@ -19,6 +19,41 @@ class VercelError extends Error {
   }
 }
 
+async function vercelFetch<T = any>(
+  token: string,
+  path: string,
+  options?: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: any; teamId?: string | null }
+): Promise<T> {
+  const url = new URL(`https://api.vercel.com${path}`);
+  if (options?.teamId) {
+    url.searchParams.set('teamId', options.teamId);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: options?.method || 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: options?.body ? JSON.stringify(options.body) : undefined,
+  });
+
+  const text = await response.text();
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    throw new VercelError(text || `Vercel API request failed (${response.status})`, response.status);
+  }
+
+  if (!response.ok) {
+    const msg = json?.error?.message || json?.message || text;
+    throw new VercelError(msg || `Vercel API request failed (${response.status})`, response.status);
+  }
+
+  return json as T;
+}
+
 async function railwayFetch<T = any>(token: string, query: string, variables?: Record<string, any>): Promise<T> {
   const response = await fetch(RAILWAY_GQL, {
     method: 'POST',
