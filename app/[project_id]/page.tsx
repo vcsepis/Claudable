@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { FaArrowLeft, FaExternalLinkSquareAlt, FaRedo } from "react-icons/fa";
+import { FaArrowLeft, FaLink, FaRedo } from "react-icons/fa";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
@@ -141,7 +141,7 @@ export default function ProjectPreviewPage() {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-sm text-white hover:bg-white/5 transition"
               >
-                <FaExternalLinkSquareAlt size={12} />
+                <FaLink size={12} />
                 Open underlying preview
               </a>
             )}
