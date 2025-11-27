@@ -179,11 +179,7 @@ async function findAvailablePort(rangeStart, rangeEnd, preferredPort) {
 async function ensureEnvironment(options = {}) {
   console.log('🔧 Setting up development environment...');
 
-  const { preferredPort: preferredOverride } = options ?? {};
-  const allowPreviewRange =
-    options && Object.prototype.hasOwnProperty.call(options, 'allowPreviewRange')
-      ? Boolean(options.allowPreviewRange)
-      : false;
+  const { preferredPort: preferredOverride, allowPreviewRange = false } = options ?? {};
 
   let envContents = readFileSafe(envFile);
   const envLocalContentsRaw = readFileSafe(envLocalFile);
@@ -242,15 +238,22 @@ async function ensureEnvironment(options = {}) {
     return val;
   };
 
-  const preferredPortCandidates = [
-    sanitizeWebCandidate(overridePreferred),
-    sanitizeWebCandidate(parsePortValue(process.env.WEB_PORT)),
-    sanitizeWebCandidate(parsePortValue(process.env.PORT)),
-    sanitizeWebCandidate(extractPort(envContents, ['PORT', 'WEB_PORT'])),
-  ];
+  const preferredPortCandidates =
+    allowPreviewRange && overridePreferred !== null
+      ? [overridePreferred]
+      : [
+          sanitizeWebCandidate(overridePreferred),
+          sanitizeWebCandidate(parsePortValue(process.env.WEB_PORT)),
+          sanitizeWebCandidate(parsePortValue(process.env.PORT)),
+          sanitizeWebCandidate(extractPort(envContents, ['PORT', 'WEB_PORT'])),
+        ];
 
   let preferredPort =
     preferredPortCandidates.find((value) => value !== null) ?? DEFAULT_WEB_PORT;
+
+  if (allowPreviewRange && overridePreferred !== null) {
+    preferredPort = overridePreferred;
+  }
 
   // Compute scan window for WEB app: stay below preview range when possible
   let webRangeStart = preferredPort;
@@ -258,7 +261,9 @@ async function ensureEnvironment(options = {}) {
     preferredPort + DEFAULT_WEB_SCAN_SPAN,
     portRangeStart > preferredPort ? portRangeStart - 1 : preferredPort + DEFAULT_WEB_SCAN_SPAN
   );
-  if (webRangeEnd < webRangeStart) {
+  if (allowPreviewRange && overridePreferred !== null) {
+    webRangeEnd = preferredPort;
+  } else if (webRangeEnd < webRangeStart) {
     webRangeEnd = webRangeStart;
   }
 
