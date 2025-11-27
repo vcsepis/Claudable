@@ -26,7 +26,7 @@
     "setup": "npm install && prisma generate && prisma db push",
     "check-cli": "node scripts/check-claude-cli.js",
     "postinstall": "npm run ensure:env",
-    "web": "SKIP_DB_SYNC=1 NODE_ENV=production node scripts/run-web.js --port 3006",
+    "web": "node scripts/web-start.js --port 3006",
     "preview": "node scripts/run-web.js --port 3100"
   },
   "dependencies": {

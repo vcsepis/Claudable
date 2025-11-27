@@ -21,9 +21,15 @@ dotenv.config({ path: path.join(rootDir, '.env.local') });
 function parseCliArgs(argv) {
   const passthrough = [];
   let preferredPort;
+  let allowPreviewRange = false;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
+
+    if (arg === '--allow-preview-port' || arg === '--allow-preview-range') {
+      allowPreviewRange = true;
+      continue;
+    }
 
     if (arg === '--port' || arg === '-p') {
       const value = argv[i + 1];
@@ -54,7 +60,7 @@ function parseCliArgs(argv) {
     passthrough.push(arg);
   }
 
-  return { preferredPort, passthrough };
+  return { preferredPort, passthrough, allowPreviewRange };
 }
 
 function runPrismaDbPush() {
@@ -125,9 +131,11 @@ async function startWebDevServer({
   preferredPort,
   passthrough = [],
   stdio = 'inherit',
+  allowPreviewRange = false,
 } = {}) {
   const { port, url } = await ensureEnvironment({
     preferredPort,
+    allowPreviewRange,
   });
 
   await ensureDatabaseSynced();
@@ -175,12 +183,13 @@ async function startWebDevServer({
 
 async function runFromCli() {
   const argv = process.argv.slice(2);
-  const { preferredPort, passthrough } = parseCliArgs(argv);
+  const { preferredPort, passthrough, allowPreviewRange } = parseCliArgs(argv);
 
   const { child } = await startWebDevServer({
     preferredPort,
     passthrough,
     stdio: 'inherit',
+    allowPreviewRange: allowPreviewRange || process.env.ALLOW_PREVIEW_PORT === '1',
   });
 
   child.on('error', (error) => {
